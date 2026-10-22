@@ -61,6 +61,7 @@ struct Asset {
   size_t bytes = 0;
   int w = 0, h = 0, frames = 1;
   bool alpha = false;
+  bool indexed = false; // i4: per frame a 16-entry ARGB8888 palette, then 4-bit indices
   std::vector<lv_image_dsc_t> dsc;
   ~Asset() {
     if (data) heap_caps_free(data);
@@ -298,6 +299,30 @@ void flush(lv_display_t *display, const lv_area_t *area, uint8_t *pixels) {
                          lv_area_get_width(area), lv_area_get_height(area), pageTurn);
   lv_display_flush_ready(display);
 }
+
+#if defined(WIGNET_DRAW_TIMING)
+// Bench only: how long each refresh of the display takes, drawing and pushing
+// to the panel, logged every 5 s (docs/scene_runtime.md "Indexed pictures").
+uint32_t refreshStartUs = 0, refreshCount = 0, refreshTotalUs = 0, refreshMaxUs = 0, refreshLogMs = 0;
+
+void onRefresh(lv_event_t *event) {
+  if (lv_event_get_code(event) == LV_EVENT_REFR_START) {
+    refreshStartUs = micros();
+    return;
+  }
+  const uint32_t took = micros() - refreshStartUs;
+  refreshCount++;
+  refreshTotalUs += took;
+  if (took > refreshMaxUs) refreshMaxUs = took;
+  if (millis() - refreshLogMs >= 5000) {
+    Serial.printf("[Draw] %u refreshes, %.2f ms on average, %.2f ms at most; %u B of PSRAM free\n",
+                  static_cast<unsigned>(refreshCount), refreshCount ? refreshTotalUs / 1000.0 / refreshCount : 0.0,
+                  refreshMaxUs / 1000.0, static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)));
+    refreshCount = refreshTotalUs = refreshMaxUs = 0;
+    refreshLogMs = millis();
+  }
+}
+#endif
 
 void lvglTask(void *) {
   for (;;) {
@@ -805,18 +830,28 @@ bool sha256Matches(const uint8_t *data, size_t bytes, const char *hex) {
 
 // --------------------------------------------------------------- loading --
 
+// Bytes a frame holds: RGB565 (2 a pixel), RGB565A8 (3), or i4, its palette
+// (16 ARGB8888 entries, what LVGL reads right before the indices) then two
+// pixels a byte, each row whole.
+size_t frameBytesOf(const Asset &asset) {
+  if (asset.indexed) return 16 * 4 + static_cast<size_t>((asset.w + 1) / 2) * asset.h;
+  return static_cast<size_t>(asset.w) * asset.h * (asset.alpha ? 3 : 2);
+}
+
 // One lv_image_dsc_t per frame of an asset whose data is in place.
 void describe(Asset &asset) {
-  const size_t frameBytes = static_cast<size_t>(asset.w) * asset.h * (asset.alpha ? 3 : 2);
+  const size_t frameBytes = frameBytesOf(asset);
   asset.dsc.resize(asset.frames);
   for (int f = 0; f < asset.frames; f++) {
     lv_image_dsc_t &dsc = asset.dsc[f];
     memset(&dsc, 0, sizeof(dsc));
     dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-    dsc.header.cf = asset.alpha ? LV_COLOR_FORMAT_RGB565A8 : LV_COLOR_FORMAT_RGB565;
+    dsc.header.cf = asset.indexed ? LV_COLOR_FORMAT_I4
+                    : asset.alpha ? LV_COLOR_FORMAT_RGB565A8 : LV_COLOR_FORMAT_RGB565;
     dsc.header.w = asset.w;
     dsc.header.h = asset.h;
-    dsc.header.stride = asset.w * 2; // of the RGB565 plane; an A8 plane follows
+    // Of the RGB565 plane (an A8 plane follows), or of the i4 indices.
+    dsc.header.stride = asset.indexed ? (asset.w + 1) / 2 : asset.w * 2;
     dsc.data_size = frameBytes;
     dsc.data = asset.data + f * frameBytes;
   }
@@ -870,9 +905,11 @@ std::unique_ptr<Scene> load(const String &id, const String &url) {
     asset->w = info["w"] | 0;
     asset->h = info["h"] | 0;
     asset->frames = info["frames"] | 1;
-    asset->alpha = String(info["format"] | "") == "rgb565a8";
+    const String format = info["format"] | "";
+    asset->alpha = format == "rgb565a8";
+    asset->indexed = format == "i4";
     asset->bytes = info["bytes"] | 0;
-    const size_t frameBytes = static_cast<size_t>(asset->w) * asset->h * (asset->alpha ? 3 : 2);
+    const size_t frameBytes = frameBytesOf(*asset);
     total += asset->bytes;
     if (!frameBytes || asset->frames < 1 || asset->bytes != frameBytes * asset->frames || total > BUNDLE_MAX_BYTES ||
         !info["file"].is<const char *>()) {
@@ -1189,6 +1226,10 @@ void begin() {
   }
   lv_display_set_buffers(display, buf1, buf2, bufferBytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
   lv_display_set_flush_cb(display, flush);
+#if defined(WIGNET_DRAW_TIMING)
+  lv_display_add_event_cb(display, onRefresh, LV_EVENT_REFR_START, nullptr);
+  lv_display_add_event_cb(display, onRefresh, LV_EVENT_REFR_READY, nullptr);
+#endif
   lv_obj_t *screen = lv_screen_active();
   lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(screen, lv_color_black(), 0);

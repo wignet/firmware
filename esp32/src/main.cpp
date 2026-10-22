@@ -650,6 +650,9 @@ int fetchSchedule() {
   // scene_turn1, scene_avoid1 and, with audio_out, scene_sound1 and
   // scene_tone1 said: besides it a scene player declares hardware alone.
   url += "%2Cscene2";
+  // scene_i4: sprite sheets may come as I4 (scene_player.cpp describe),
+  // a sixth of RGB565A8 (docs/scene_runtime.md "Indexed pictures").
+  url += "%2Cscene_i4";
 #if defined(WIGNET_HAS_IMU)
   // motion1: tilt values and tilt/shake/face_down events (OrientationHAL::gravity).
   url += "%2Cmotion1";

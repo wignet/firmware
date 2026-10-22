@@ -209,25 +209,39 @@ Measured 2026-10-21: the 1.54" build is 1,477,217 B of flash (22.5%, up
 13.5 KB from the runtime 1 player with recolor), static RAM 104,948 B; the
 2" 1,334,333 B, 105,404 B.
 
-## Not yet: indexed pictures
+## Indexed pictures
 
-If a scene ever needs more than `bundle_bytes` (3 MB held), the next step is
-palette pictures, not another shorthand. Looked at on 2026-10-21 and left
-for when memory pinches:
+A sprite sheet of 16 colours or fewer (transparent counts as one) travels
+and is held as I4: per frame a palette of 16 ARGB8888 entries (`lv_color32_t`:
+blue, green, red, alpha), then the indices, two pixels a byte, the first in
+the high nibble, each row whole (`scenes.i4`). A colour variant is the same
+indices with its own palette. Everything else stays RGB565A8: more colours,
+and pictures that are not sheets (a hand turns; LVGL draws I4 only upright).
 
-- LVGL 9.6 draws I4/I8 pictures (a palette of ARGB8888 entries, then
-  indices). With `LV_BIN_DECODER_RAM_LOAD` 0, as here, it converts them a
-  line at a time while drawing, so the board holds only the indices. The
-  Clawd sheet has 10 colours with transparency: I4 holds a Clawd in about
-  61 KB instead of 355 KB, the field of eight in about 485 KB instead of
-  2.84 MB. A colour variant is the same indices with another palette (a
-  copy each: LVGL wants the palette right before them).
-- A picture decoded line by line cannot be turned or scaled
-  (`lv_draw_image.c`: "Partially decoded images cannot be transformed"):
-  the server would keep RGB565A8 for any picture with a bound `rotation`.
-- It needs `LV_DRAW_SW_SUPPORT_ARGB8888` on: +12,388 B of flash on the
-  1.54", the same RAM (built 2026-10-21). Each redraw converts every line
-  through the palette: draw time to be measured on the 1.54" first.
-- The server would choose the format per picture; agents would see nothing
-  but a smaller `bundle_bytes`. The firmware needs a flash and a token for
-  the format.
+- For every board that declares `scene_i4` besides `scene2`: every scene
+  player built from main since 2026-10-22. The publication records
+  it (`spec.scene_i4`); a board that starts or stops declaring it gets its
+  scenes compiled again (`_screen`, `scene_keeps_turn`).
+- It needs `LV_DRAW_SW_SUPPORT_ARGB8888` (on in `spike/lv_conf.h`).
+- LVGL 9.6 does not draw I4 from RAM a line at a time, as first read: for an
+  image in RAM `lv_bin_decoder` decodes the whole frame into an ARGB8888 draw
+  buffer each time it opens it (`decode_indexed`), then frees it. The board
+  holds only the indices.
+
+Measured 2026-10-22 on SideWig (1.54", `80456b35b0a0`) against production,
+the Clawd field at 52x44 (eight sheets of 23 frames), built with
+`-DWIGNET_DRAW_TIMING` (each display refresh, drawing and pushing to the
+panel, logged every 5 s):
+
+| | RGB565A8 | I4 |
+|---|---|---|
+| Held | 1,262,976 B | 222,272 B |
+| PSRAM free while playing | 6,830,187 B | 7,870,891 B |
+| One Clawd still, a refresh | 2.1 ms on average | 1.2 ms |
+| Eight wandering, a refresh | 30-34 ms on average, ~55 ms at most | 41-51 ms, ~72 ms |
+| Refreshes a second, eight wandering | ~25 | ~20 |
+
+The same field at 78x66 holds 485,392 B as I4 instead of 2,841,696 B.
+Movement keeps its speed (the animations follow the clock); with many sprites
+on the move it is a little less smooth. Chosen as the default for its memory:
+the owner wants small packages, and a scene holds a sixth as much.

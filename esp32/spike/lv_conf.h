@@ -19,10 +19,11 @@
 #define LV_USE_OS LV_OS_NONE
 #define LV_DEF_REFR_PERIOD 33 // ~30 fps at most
 
-// Only the formats the scene uses: RGB565 background, RGB565A8 sprites.
+// Only the formats the scene uses: RGB565 background, RGB565A8 sprites, and
+// i4 sprites, which LVGL converts a line at a time to ARGB8888 while drawing.
 #define LV_DRAW_SW_SUPPORT_RGB888 0
 #define LV_DRAW_SW_SUPPORT_XRGB8888 0
-#define LV_DRAW_SW_SUPPORT_ARGB8888 0
+#define LV_DRAW_SW_SUPPORT_ARGB8888 1
 #define LV_DRAW_SW_SUPPORT_L8 0
 #define LV_DRAW_SW_SUPPORT_AL88 0
 // A8 as a render target: with ARGB8888 off, 9.6 fails to link

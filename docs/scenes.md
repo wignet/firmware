@@ -160,11 +160,23 @@ An asset may be another one with exact colours swapped:
   the then 1.5 MB download limit.
 - **Size.** `bundle_bytes` (3 MB) bounds the sum of every asset held raw,
   variants included; the `push_scene` answer's `rendering.scene` gives it.
+  A sheet of 16 colours or fewer is held as I4 on a board declaring
+  `scene_i4`, a sixth of RGB565A8 (each asset's `format`;
+  docs/scene_runtime.md "Indexed pictures").
 - **Why 3 MB.** The boards have 8 MB of PSRAM, and a new scene is loaded
   beside the one playing before it takes over, so two bundles must fit.
   Measured 2026-10-21 on SideWig2 with the Clawd field below holding
   2,718,144 B: 5,281,999 B of PSRAM still free, room for a second scene at
   the limit.
+- **Only from firmware `ce06008` on** (a commit of the history before this
+  repository: every firmware built from here has it). Before it the player held 1.5 MB
+  (`BUNDLE_MAX_BYTES`) and refuses a bigger bundle: the screen stays on the
+  first page (`/pic`) and never acknowledges an event (429 once 16 wait),
+  while the server says "fetched". SideWig on `e12b5c9` did so on 2026-10-22
+  with the Clawd field at 2,841,696 B. The server now holds each board to its
+  firmware's limit (`scenes.bundle_limit`: 3 MB if the reported `fw=` commit
+  has `ce06008`, else 1.5 MB, unknown or absent included), and
+  `get_capabilities` `scene.limits.bundle_bytes` says which.
 
 Measured 2026-10-21 on SideWig2 (`02:00:00:00:00:07`) on the bench platform:
 the Clawd field, one orange sheet of 22 frames of 78x66 (2,291 B of PNG,
@@ -175,7 +187,7 @@ manifest. Each variant's sha256, logged by the board, was the one of the
 file the server now sends (`scenes.recolor_asset`). As files the same
 field holds 2,718,144 B, which the 1.5 MB download limit refused then and
 the 3 MB held limit takes now (`test_the_clawd_field_of_eight_fits_the_2_inch_as_files`;
-the field `~/.claude/wignet-clawd` builds, 2,841,696 B on the 2" both ways up). The 2" build is 1,322,877 B of flash
+the field `~/Projects/wignet-clawd` builds, 2,841,696 B on the 2" both ways up). The 2" build is 1,322,877 B of flash
 (20.2%), static RAM 105,452 B; the 1.54" build 1,466,057 B (22.4%), 104,972
 B. Seen on the 1.54": not yet.
 
@@ -337,6 +349,34 @@ plays scenes: `set_slides` and `add_slide` take `{"scene": {...}}` (or a scene's
   (409), saying when it shows again: events are not kept for later.
 - A standing scene (`push_scene` with `standing`) is a slide list of one.
 
+## Cover: what the owner's page shows
+
+The screen plays a scene itself, so its first page says little of it (the
+Clawd field starts with every Clawd hidden: a black page). The owner's page
+(`preview.png?view=page`, `page_preview`) shows the scene's cover instead:
+
+```json
+"cover": {"name": "Clawd field", "icon": "clawd"}
+```
+
+- `name`, 1 to 32 characters (spaces collapsed); `icon`, optional, one of
+  the scene's assets (its first frame; a colour variant recoloured) or a
+  picture of its own (`image_base64` + `image_sha256`, or `image_url`), at
+  most 128 px a side.
+- The server draws it at the page's size (`scene_cover.compose`): the icon,
+  trimmed to what it shows, at the largest whole multiple that fits 45% of
+  the page's short side (shrunk smoothly if larger), centred on black, the
+  name under it in Archivo Bold in the Wignet's light ink (`#F7F2E8`), as
+  large as fits, cut with an ellipsis if it does not.
+- Without a cover the owner's page shows "Scene" the same way, and the
+  answer says so (`rendering.scene.cover_note`). A scene published before
+  covers keeps showing its first page.
+- Stored as `cover.png` (and `cover_icon.png`, a picture of its own, read
+  back when the scene is compiled again for a turned screen). `/pic`, the
+  answer's `preview_url` and `panel.*` stay the first page: what the screen
+  shows, the page an agent checks its layout against. The cover's URL is
+  `rendering.scene.cover_url`.
+
 ## The bundle the screen downloads
 
 `push_scene` publishes a publication of kind `scene`, as a push (3 h by
@@ -347,7 +387,8 @@ takes over. Its folder (`generated/publications/<id>/`) holds:
 - `asset_<name>.bin`, one raw file per asset;
 - `src_<name>.png`, the pictures as received (what a re-render compiles from);
 - the usual `source.png` and `panel.*`: the first page as it first shows, so
-  `/pic`, previews and the owner's page work as for any publication;
+  `/pic` and the agent's previews work as for any publication;
+- `cover.png`, what the owner's page shows (and `cover_icon.png`), see "Cover";
 - `asset_<name>.bin.z`, the asset deflated, made on its first `z=1` request.
 
 ### Compressed assets
