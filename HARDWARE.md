@@ -66,6 +66,10 @@ including what was and was not validated on hardware.
     press reaches the scene as `pwr.short`, the hold stays the board's;
   - `touch1` (a touch screen): touches on objects.
 
+  It also says what it can hold and draw: `scene_3mb` (a bundle of up to
+  3 MB in PSRAM; without it the server sends at most 1.5 MB) and `scene_i4`
+  (I4 pictures, `docs/scene_runtime.md` "Indexed pictures").
+
   **A new kind of scene is not a new token.** It is expressed with the
   runtime (variables, bindings, guards, `every:`, `when:`) or becomes a
   shorthand the server compiles down to it (`docs/scene_runtime.md`

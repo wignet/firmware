@@ -653,6 +653,9 @@ int fetchSchedule() {
   // scene_i4: sprite sheets may come as I4 (scene_player.cpp describe),
   // a sixth of RGB565A8 (docs/scene_runtime.md "Indexed pictures").
   url += "%2Cscene_i4";
+  // scene_3mb: a bundle of up to 3 MB held raw (scene_player.cpp
+  // BUNDLE_MAX_BYTES); without it the server keeps scenes to 1.5 MB.
+  url += "%2Cscene_3mb";
 #if defined(WIGNET_HAS_IMU)
   // motion1: tilt values and tilt/shake/face_down events (OrientationHAL::gravity).
   url += "%2Cmotion1";
