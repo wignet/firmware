@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install PlatformIO
-        run: python -m pip install platformio==6.1.19
+        run: python -m pip install platformio==6.2.0
       - name: Build a clean first-install image
         working-directory: esp32
         run: |
