@@ -10,6 +10,14 @@ the GPL-3.0.
 
 ## Get a working Wignet
 
+**Waveshare ESP32 Driver Board + 7.5-inch V2:** use the
+[ready-to-flash download](https://github.com/wignet/firmware/releases/latest)
+and follow [the USB installation guide](docs/flashing.md). No PlatformIO or
+compilation is needed. Downloads for other boards will follow hardware
+validation.
+
+To build from source:
+
 1. Pick a supported board (below) and install [PlatformIO](https://platformio.org).
 2. Flash it:
 
