@@ -42,6 +42,8 @@ there would be refused, and the published app's tool list stays as it was.
 | `motion1` | it reports `tilt.*`, `shake`, `face_down` |
 | `touch1` | it reports `p<page>b<id>.up|down` |
 | `pwr_short1` | a short press of PWR reaches a scene as `pwr.short` (the hold stays the board's) |
+| `scene_i4` | it draws I4 pictures: sprite sheets of 16 colours or fewer come that way (`docs/scene_runtime.md` "Indexed pictures") |
+| `scene_3mb` | it holds a bundle of up to 3 MB; without it (or `scene_i4`) the server keeps its scenes to 1.5 MB |
 | `in=a,b` | the logical buttons a scene may bind (`^[a-z][a-z0-9_]{0,15}$`, 8 at most). Stored as `devices.reported_inputs` (JSON), only with `scene2`. `pwr`/`power` are dropped |
 
 Example: `/schedule?mac=…&caps=v1:rgb,screen_size1,orientation_report1,scene2,motion1&w=320&h=240&ori=0&in=a`.
@@ -168,15 +170,14 @@ An asset may be another one with exact colours swapped:
   Measured 2026-10-21 on SideWig2 with the Clawd field below holding
   2,718,144 B: 5,281,999 B of PSRAM still free, room for a second scene at
   the limit.
-- **Only from firmware `ce06008` on** (a commit of the history before this
-  repository: every firmware built from here has it). Before it the player held 1.5 MB
-  (`BUNDLE_MAX_BYTES`) and refuses a bigger bundle: the screen stays on the
-  first page (`/pic`) and never acknowledges an event (429 once 16 wait),
-  while the server says "fetched". SideWig on `e12b5c9` did so on 2026-10-22
-  with the Clawd field at 2,841,696 B. The server now holds each board to its
-  firmware's limit (`scenes.bundle_limit`: 3 MB if the reported `fw=` commit
-  has `ce06008`, else 1.5 MB, unknown or absent included), and
-  `get_capabilities` `scene.limits.bundle_bytes` says which.
+- **Only on a board that says so.** A player that holds 3 MB declares
+  `scene_3mb`; the server keeps any other to 1.5 MB (`scenes.bundle_limit`),
+  and `get_capabilities` `scene.limits.bundle_bytes` says which. A board
+  given more than it holds refuses the bundle: the screen stays on the first
+  page (`/pic`) and never acknowledges an event (429 once 16 wait), while
+  the server says "fetched" (SideWig, 2026-10-22, the Clawd field at
+  2,841,696 B on a 1.5 MB firmware). Every firmware that declares
+  `scene_i4` holds 3 MB too, so `scene_i4` counts as `scene_3mb`.
 
 Measured 2026-10-21 on SideWig2 (`02:00:00:00:00:07`) on the bench platform:
 the Clawd field, one orange sheet of 22 frames of 78x66 (2,291 B of PNG,
