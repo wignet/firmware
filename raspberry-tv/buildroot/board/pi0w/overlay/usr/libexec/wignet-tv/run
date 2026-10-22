@@ -1,0 +1,11 @@
+#!/bin/sh
+# Wi-Fi onboarding (returns at once on a saved, reachable network), then the
+# client.  inittab restarts this script whenever the client exits.
+set -a
+. /etc/wignet-tv.conf
+set +a
+/usr/local/lib/wignet-tv/wifi_setup.py 2>&1 | logger -t wignet-tv-setup
+# Wi-Fi and DNS are now available, including after first-time onboarding.
+/etc/init.d/S45ntpd restart
+/usr/local/lib/wignet-tv/wignet_tv.py 2>&1 | logger -t wignet-tv
+sleep 5

@@ -1,0 +1,17 @@
+#!/bin/sh
+# First thing at boot: the Wignet splash on HDMI, then a plausible clock.
+
+case "$1" in
+start)
+	mkdir -p /data/wignet-tv /data/wifi /data/dropbear
+	# vc4 is built into the kernel: fb0 is normally there already.
+	for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+		[ "$(cat /sys/class/graphics/fb0/name 2>/dev/null)" = vc4drmfb ] && break
+		sleep 0.1
+	done
+	/usr/local/lib/wignet-tv/boot-splash.sh
+	# No RTC: start from the last time ntpd saw, so TLS certificates check
+	# out before the network answers.  ntpd corrects it (S45ntpd).
+	[ -f /data/clock ] && date -s "@$(date -r /data/clock +%s)" >/dev/null
+	;;
+esac

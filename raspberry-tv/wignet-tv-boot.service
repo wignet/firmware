@@ -1,0 +1,12 @@
+[Unit]
+Description=Wignet TV boot tuning (quiet console, unused services off)
+# After onboarding, so cloud-init has finished the Imager's first-boot setup
+# before it is switched off.  The client does not wait for it.
+After=wignet-tv-setup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wignet-tv-boot apply
+
+[Install]
+WantedBy=multi-user.target

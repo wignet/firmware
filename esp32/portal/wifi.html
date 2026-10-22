@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title data-i18n="title.wifi">Choose a network — Wignet</title>
+  <link rel="stylesheet" href="/static/wignet-portal.css">
+  <link rel="stylesheet" href="/static/portal.css">
+</head>
+<body data-page="wifi">
+  <main class="shell">
+    <header class="portal-chrome">
+      <span class="brand">Wignet</span>
+      <span class="chrome-end">
+        <label class="lang-select">
+          <span class="visually-hidden" data-i18n="lang.label">Language</span>
+          <select id="lang">
+            <option value="en">English</option>
+            <option value="fr">Français</option>
+          </select>
+        </label>
+      </span>
+    </header>
+    <section class="page-head">
+      <h1 data-i18n="wifi.title">Choose a network</h1>
+      <p class="hint" data-i18n="wifi.hint">Select the network your frame should connect to. It remembers up to 5 networks and joins whichever is in range.</p>
+    </section>
+    <section class="owner-block network-card" aria-labelledby="nearby-heading">
+      <div class="section-heading">
+        <div>
+          <p class="label" data-i18n="wifi.available">Available networks</p>
+          <p class="hint" id="nearby-heading" data-i18n="wifi.nearby">Nearby</p>
+        </div>
+        <button class="link-button" type="button" id="refresh" data-i18n="wifi.refresh" data-i18n-attr="aria-label:wifi.refreshAria" aria-label="Search again">↻ Refresh</button>
+      </div>
+      <p class="hint network-status" id="network-status" role="status" data-i18n="wifi.searching">Searching…</p>
+      <div class="network-list" id="network-list" aria-busy="true">
+        <a class="network network-other" href="/connect?manual=1">
+          <span class="plus" aria-hidden="true">+</span>
+          <span class="network-copy"><strong data-i18n="wifi.other">Another network</strong><small data-i18n="wifi.otherHint">Enter its name manually</small></span>
+        </a>
+      </div>
+    </section>
+    <section class="owner-block help-block">
+      <p class="hint hint-sm" data-i18n="wifi.help">Can’t see your network? Check that it broadcasts on 2.4 GHz, then search again.</p>
+    </section>
+  </main>
+  <script src="/static/portal.js"></script>
+</body>
+</html>

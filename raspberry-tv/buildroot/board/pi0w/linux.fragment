@@ -1,0 +1,12 @@
+# The HDMI framebuffer before /sbin/init: vc4 and what it waits for are built
+# in.  vc4 depends on ALSA SoC for HDMI audio.
+CONFIG_SND=y
+CONFIG_SND_SOC=y
+CONFIG_DRM=y
+CONFIG_DRM_VC4=y
+CONFIG_DRM_VC4_HDMI_CEC=y
+CONFIG_I2C_BCM2835=y
+CONFIG_CEC_CORE=y
+# No Raspberry logo, no Bluetooth.
+# CONFIG_LOGO is not set
+# CONFIG_BT is not set

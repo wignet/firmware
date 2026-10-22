@@ -1,0 +1,26 @@
+[Unit]
+Description=Wignet HDMI RGB display client
+Wants=NetworkManager.service time-sync.target
+Requires=wignet-tv-setup.service
+# Complete Wi-Fi onboarding before the graphical reader takes over the TV.
+# HTTPS retries safely until the Pi has a valid clock and the API is reachable.
+After=NetworkManager.service wignet-tv-setup.service
+
+[Service]
+Type=simple
+User=wignet-tv
+SupplementaryGroups=video render input audio
+EnvironmentFile=-/etc/wignet-tv.conf
+Environment=PYTHONNOUSERSITE=1
+Environment=WIGNET_STATE_DIR=/var/lib/wignet-tv
+StateDirectory=wignet-tv
+ExecStart=/usr/local/lib/wignet-tv/wignet_tv.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

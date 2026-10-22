@@ -1,0 +1,8 @@
+config BR2_PACKAGE_WIGNET_TV
+	bool "wignet-tv"
+	depends on BR2_PACKAGE_PYTHON3
+	select BR2_PACKAGE_PYTHON_PILLOW
+	select BR2_PACKAGE_PYTHON_NUMPY
+	help
+	  The Wignet HDMI client, its Wi-Fi onboarding portal and boot
+	  splash, from raspberry-tv.

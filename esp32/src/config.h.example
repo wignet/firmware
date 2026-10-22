@@ -1,0 +1,13 @@
+#pragma once
+
+// Values are defined in config.cpp. Copy this file to config.h before the
+// first build; config.h is ignored so a deployment can add local settings.
+extern const int HTTP_PORT;
+extern const char *WIGNET_HOST;
+extern const int WIGNET_PORT;
+extern const char *WIGNET_IMAGE_PATH;
+extern const int WIGNET_POLL_INTERVAL_SEC;
+extern const int WIGNET_INITIAL_POLL_DELAY_SEC;
+extern const int DEFAULT_REFRESH_SEC;
+extern const unsigned long SAFE_PERIOD_MS;
+extern const char *WIGNET_SCHEDULE_PATH;

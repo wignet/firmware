@@ -1,0 +1,29 @@
+#!/bin/sh
+# Set the clock from the network; /data/clock keeps it across boots.
+
+start() {
+	# rcS runs before Wi-Fi onboarding. Start with working DNS, rather than
+	# leaving ntpd's initial lookup pending while the radio is the setup AP.
+	ip -4 route show default | grep -q . || return 0
+	start-stop-daemon -S -b -q -O /var/log/ntpd.log -x /usr/sbin/ntpd -- \
+		-n -p pool.ntp.org -S /usr/libexec/wignet-tv/ntp-event
+}
+
+stop() {
+	start-stop-daemon -K -q -x /usr/sbin/ntpd || true
+	# Never save the initial 1970 clock before the first successful sync.
+	[ ! -f /data/clock ] || touch /data/clock
+}
+
+case "$1" in
+start)
+	start
+	;;
+stop)
+	stop
+	;;
+restart)
+	stop
+	start
+	;;
+esac

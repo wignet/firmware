@@ -1,0 +1,17 @@
+# Wignet TV, Raspberry Pi Zero W.  See ../../README.md.
+start_file=start.elf
+fixup_file=fixup.dat
+kernel=zImage
+
+# No rainbow square, no boot delay: the TV stays black until the Wignet splash.
+disable_splash=1
+boot_delay=0
+disable_overscan=1
+
+# KMS: the HDMI framebuffer, HDMI-CEC (/dev/cec0) and HDMI audio come from
+# vc4, built into the kernel so the framebuffer exists before /sbin/init.
+dtoverlay=vc4-kms-v3d,cma-96
+dtparam=audio=on
+
+# No Bluetooth; the PL011 UART goes back to GPIO 14/15 for a serial console.
+dtoverlay=disable-bt

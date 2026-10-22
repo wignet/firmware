@@ -1,0 +1,6 @@
+#MML1
+; Four-channel wake-up jingle: the example in docs/mml.md.
+A t140 o5 l8 v13 @1 c e g >c< | g e c r
+B o4 l4 v9 @2 c e g4 [c8]2
+C o3 l2 c g
+D l8 s2 [c r]4

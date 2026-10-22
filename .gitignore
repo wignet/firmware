@@ -1,0 +1,5 @@
+.pio/
+__pycache__/
+*.pyc
+.DS_Store
+raspberry-tv/VERSION

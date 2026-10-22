@@ -1,0 +1,4 @@
+# Show the Wignet splash the moment the KMS framebuffer exists (not the
+# firmware's simplefb, which vc4 replaces a few seconds later).  RUN, not a
+# systemd unit: copying 4 MB takes milliseconds, a queued job seconds.
+ACTION=="add", SUBSYSTEM=="graphics", KERNEL=="fb0", ATTR{name}=="vc4drmfb", RUN+="/usr/local/lib/wignet-tv/boot-splash.sh"

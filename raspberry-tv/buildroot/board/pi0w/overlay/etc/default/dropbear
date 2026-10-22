@@ -1,0 +1,2 @@
+# Keys only (/root/.ssh/authorized_keys, from WIGNET_AUTHORIZED_KEYS at build).
+DROPBEAR_ARGS="-s"

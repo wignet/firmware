@@ -1,0 +1,17 @@
+#MML1
+; First Light: an original wake-up tune, built into every Wignet. Gentle, warm, a little wistful.
+; G major, 16 bars of 4/4, four phrases of 4 bars.
+; Chords: G D Em C | G D C Cm | Em Bm C G | Am D C-Cm D7 (leads back to bar 1)
+A t96 o5 v12 @1 q7 l8 b4. a g4 d4 | o5 a4. f+ e4 d4 | o5 g4 b4 o6 d4. c | o5 b2 g4 e4
+A o5 d4. e g4 b4 | o5 a4. g f+4 a4 | o5 g4 e4 c4 e4 | o5 e-2. d4
+A @2 o5 e4 g b o6 e4 d4 | o6 d4. o5 b f+4 b4 | o5 a4 g4 e4 g4 | o5 d2 g4 a4
+A @1 o6 c4. o5 b a4 e4 | o5 f+4. g a4 d4 | o5 e4 g4 e-4 g4 | o5 f+2. a4
+B v7 @1 s3 q7 l8 [o4 g b o5 d o4 b]2 | [o4 f+ a o5 d o4 a]2 | [o4 e g b g]2 | [o4 e g o5 c o4 g]2
+B [o4 g b o5 d o4 b]2 | [o4 f+ a o5 d o4 a]2 | [o4 e g o5 c o4 g]2 | [o4 e- g o5 c o4 g]2
+B [o4 e g b g]2 | [o4 f+ b o5 d o4 b]2 | [o4 e g o5 c o4 g]2 | [o4 g b o5 d o4 b]2
+B [o4 e a o5 c o4 a]2 | [o4 f+ a o5 d o4 a]2 | o4 e g o5 c o4 g e- g o5 c o4 g | [o4 f+ a o5 c o4 a]2
+C v13 @0 q7 l2 o3 g o4 d | o3 d a | o3 e b | o3 c g
+C o3 g o4 d | o3 d a | o3 c g | o3 c g
+C o3 e b | o3 b o4 f+ | o3 c g | o3 g o4 d
+C o3 a o4 e | o3 d a | o3 c c | o3 d a
+D l8 [v6 s2 o2 c v3 s1 o7 c v2 c v3 c v4 s2 o5 c v3 s1 o7 c v2 c v3 c]16

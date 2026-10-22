@@ -1,0 +1,2 @@
+# S45ntpd needs the BusyBox NTP client; it is off in Buildroot's defaults.
+CONFIG_NTPD=y

@@ -1,0 +1,8 @@
+; No header: the platform adds it. Ties, dots, nested loops, accidentals,
+; a channel split across lines, bar lines and comments.
+A t96 o4 l16 q8 [c+ d- e#]3 r16. r32 | c4&c8. r16
+B o6 l8 s1 @0 [[a b-]2 >c<]2 r4
+A [g- f]2 c2&c8&c8 r1 r2 r4 r16
+B q3 v15 a1 < b4 r1 r4
+C @1 o2 l4. c r8 [g]2 r4 c4 r2 r8 r8 r2. r2.
+D @1 v10 s7 c1&c1 r4 [b16]4 r4 r4 r1

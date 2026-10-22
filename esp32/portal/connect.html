@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title data-i18n="title.connect">Connect to the network — Wignet</title>
+  <link rel="stylesheet" href="/static/wignet-portal.css">
+  <link rel="stylesheet" href="/static/portal.css">
+</head>
+<body data-page="connect">
+  <main class="shell">
+    <header class="portal-chrome">
+      <span class="brand">Wignet</span>
+      <span class="chrome-end">
+        <label class="lang-select">
+          <span class="visually-hidden" data-i18n="lang.label">Language</span>
+          <select id="lang">
+            <option value="en">English</option>
+            <option value="fr">Français</option>
+          </select>
+        </label>
+      </span>
+    </header>
+    <div id="connect-view">
+      <section class="page-head connect-head">
+        <a class="back-link" href="/wifi" data-i18n="connect.back" data-i18n-attr="aria-label:connect.backAria" aria-label="Back to networks">‹ Back</a>
+        <h1 data-i18n="connect.title">Connect</h1>
+      </section>
+      <!-- WiFiManager handles POST /wifisave and reads only `s` and `p`. -->
+      <form method="post" action="/wifisave" autocomplete="off" class="connect-form" id="connect-form">
+        <section class="owner-block credentials-card" aria-labelledby="credentials-heading">
+          <p class="label" data-i18n="connect.selected">Selected network</p>
+          <h2 id="credentials-heading"></h2>
+          <div class="credentials-fields">
+            <div class="field" id="ssid-field" hidden>
+              <label for="s" data-i18n="connect.ssidLabel">Network name</label>
+              <input id="s" name="s" maxlength="32" autocomplete="off" autocorrect="off" autocapitalize="none" placeholder="Wi‑Fi name" data-i18n-attr="placeholder:connect.ssidPlaceholder">
+            </div>
+            <div class="field" id="password-field">
+              <label for="p" data-i18n="connect.passLabel">Password</label>
+              <span class="password-wrap">
+                <input id="p" name="p" maxlength="64" type="password" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Wi‑Fi password" data-i18n-attr="placeholder:connect.passPlaceholder">
+                <button type="button" class="show-password" aria-controls="p" aria-pressed="false" data-i18n="connect.show">Show</button>
+              </span>
+            </div>
+          </div>
+          <p class="hint hint-sm privacy" id="privacy"><span aria-hidden="true">✓</span> <span data-i18n="connect.privacy">Saved only on your Wignet.</span></p>
+          <button class="button submit-button" type="submit"><span class="submit-label" data-i18n="connect.submit">Save and connect</span> <span aria-hidden="true">→</span></button>
+        </section>
+      </form>
+    </div>
+    <div id="saved-view" hidden>
+      <section class="page-head success-head">
+        <h1 data-i18n="saved.title">Wi‑Fi saved</h1>
+        <div class="statusrow success"><span class="status-dot"></span><span data-i18n="saved.connecting">Connecting</span></div>
+        <p class="hint" id="saved-joining" data-i18n-html="saved.joining" data-ssid=""></p>
+      </section>
+      <section class="saved-statement" aria-label="Settings saved" data-i18n-attr="aria-label:saved.statement">
+        <p class="statusrow success"><span class="status-dot"></span><span data-i18n="saved.statement">Settings saved</span></p>
+        <p class="saved-ssid" id="saved-ssid"></p>
+      </section>
+      <section class="owner-block next-block">
+        <span class="label" data-i18n="saved.next">Next step</span>
+        <h2 data-i18n="saved.close">You can close this page</h2>
+        <p class="hint" id="saved-ap" data-i18n-html="saved.apGone" data-ap="Wignet"></p>
+      </section>
+    </div>
+  </main>
+  <script src="/static/portal.js"></script>
+</body>
+</html>

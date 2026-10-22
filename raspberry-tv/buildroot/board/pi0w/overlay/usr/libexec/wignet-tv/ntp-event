@@ -1,0 +1,3 @@
+#!/bin/sh
+# ntpd -S: the clock was stepped or is in sync; remember it for the next boot.
+touch /data/clock

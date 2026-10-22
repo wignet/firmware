@@ -1,0 +1,17 @@
+[Unit]
+Description=Wignet TV local Wi-Fi onboarding
+After=NetworkManager.service
+Wants=NetworkManager.service
+Before=wignet-tv.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+LogsDirectory=wignet-tv
+Environment=WIGNET_SETUP_LOG=/var/log/wignet-tv/setup.log
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=infinity
+ExecStart=/usr/local/lib/wignet-tv/wifi_setup.py
+

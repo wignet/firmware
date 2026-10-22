@@ -1,0 +1,15 @@
+; Korobeiniki Swing: a jazz take on the Tetris tune (Russian folk song, public domain).
+; A minor, 8 bars of 4 beats, swung eighths written as 6+12 triplet pairs.
+; Chords: Am7 | Am7 | E7 | Am7 | Dm9 | Am7 | Bm7b5 E7 | Am6
+A t144 o5 l4 v12 @1 q6 e4 o4 b6 o5 c12 d4 c6 o4 b12 | o4 a4 a6 o5 c12 e4 d6 c12
+A o4 b4&b6 o5 c12 d4 e4 | o5 c4 o4 a4 a2
+A o5 r6 d4 f12 a4 g6 f12 | o5 e4&e6 c12 e4 d6 c12
+A o4 b4 b6 o5 c12 d4 e4 | o5 c4 o4 a4 a6 o5 c12 e-6 e12
+; Piano comping: Charleston rhythm on the 3rd and 7th of each chord.
+B o5 v7 @2 s3 q8 c4. o4 g8 r2 | o4 g4. o5 c8 r2 | o4 g+4. d8 r2 | o5 c4. o4 g8 r2
+B o4 f4. o5 c8 r2 | o5 c4. o4 g8 r2 | o4 a4. g+8 r2 | o4 f+4. o5 c8 r2
+; Walking bass, kept at o3 and up for the small speaker.
+C o3 v13 @0 q6 l4 a o4 c e g | o4 a g e c | o3 b o4 d e g+ | o4 a e c c+
+C o4 d f a f | o4 e c o3 a o4 c | o3 b o4 d e g+ | o4 a f+ e o3 e
+; Drums: soft kick on 1, swung hat on 2 and 4, ride on 3.
+D [@0 o2 v10 s2 c4 @1 o7 v5 s1 c6 v3 c12 o6 v5 s3 c4 o7 v5 s1 c6 v3 c12]8

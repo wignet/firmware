@@ -1,0 +1,5 @@
+#MML1
+; Doorbell: an original chime, built into every Wignet. Ding-dong in thirds, ringing out
+A t100 @1 v15 q8 s6 o6 e4 c2 r4
+B @2 v12 q8 s6 o5 g4 e2 r4
+C @0 v15 q8 s7 o4 c2. r4

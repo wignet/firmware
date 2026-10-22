@@ -1,0 +1,1 @@
+source "$BR2_EXTERNAL_WIGNET_PATH/package/wignet-tv/Config.in"

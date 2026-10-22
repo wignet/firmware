@@ -1,0 +1,15 @@
+[Unit]
+Description=Wignet e-paper backend client (poll + display)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+# Copy wignet_client.py to /opt/wignet/ first.
+ExecStart=/usr/bin/python3 /opt/wignet/wignet_client.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
