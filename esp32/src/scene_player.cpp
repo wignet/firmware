@@ -351,6 +351,10 @@ void wanderNext(lv_anim_t *a);
 void moveTo(Obj *obj, int x, int y, uint32_t delayMs) {
   obj->tx = x;
   obj->ty = y;
+  // LVGL places an object at the next refresh: until then lv_obj_get_x reads
+  // where it was (0, 0 for one just made), and the animation, applied at
+  // once, would put it there.
+  lv_obj_update_layout(obj->o);
   const int fromX = lv_obj_get_x(obj->o), fromY = lv_obj_get_y(obj->o);
   const float distance = sqrtf(float((x - fromX) * (x - fromX) + (y - fromY) * (y - fromY)));
   const uint32_t duration = max<uint32_t>(200, distance * 1000 / max(1, obj->speed));
@@ -382,6 +386,7 @@ void wanderTo(Obj *obj) {
 // straight away, else the one that goes most away. A point merely not
 // towards it (nearly sideways) would meet it again a moment later.
 void wanderAway(Obj *obj, long ux, long uy) {
+  lv_obj_update_layout(obj->o);
   const int fromX = lv_obj_get_x(obj->o), fromY = lv_obj_get_y(obj->o);
   const int x1 = max(obj->wx0, obj->wx1 - static_cast<int>(obj->asset->w));
   const int y1 = max(obj->wy0, obj->wy1 - static_cast<int>(obj->asset->h));
@@ -412,6 +417,7 @@ bool shown(const Obj *obj) { return obj->page == currentPage && !lv_obj_has_flag
 // so sprites that overlap part instead of shaking.
 void tickAvoid(lv_timer_t *) {
   if (!scene) return;
+  lv_obj_update_layout(lv_screen_active());
   for (auto &a : scene->objects) {
     if (!a->avoids || !a->wandering || !shown(a.get())) continue;
     const int x = lv_obj_get_x(a->o), y = lv_obj_get_y(a->o);
@@ -422,16 +428,19 @@ void tickAvoid(lv_timer_t *) {
       if (b.get() == a.get() || !b->avoids || !shown(b.get())) continue;
       const int bx = lv_obj_get_x(b->o) + b->ax, by = lv_obj_get_y(b->o) + b->ay;
       if (ax >= bx + b->aw || bx >= ax + a->aw || ay >= by + b->ah || by >= ay + a->ah) continue;
-      towardX += (bx + b->aw / 2) - (ax + a->aw / 2);
-      towardY += (by + b->ah / 2) - (ay + a->ah / 2);
+      const long dx = (bx + b->aw / 2) - (ax + a->aw / 2), dy = (by + b->ah / 2) - (ay + a->ah / 2);
+      // Right on top of each other: the lower id goes left, the other right.
+      towardX += dx || dy ? dx : (b->id > a->id ? 1 : -1);
+      towardY += dy;
       if (!met++) first = b->id;
     }
     if (!met) continue;
     const long headX = a->tx - x, headY = a->ty - y;
     if (!towardX && !towardY) {
-      // Right on top of each other: away from where it was going.
-      towardX = headX;
-      towardY = headY;
+      // Still nothing to go by (between two on top of it): left, always the
+      // same way. Away from where it was going would turn it back each tick,
+      // a new heading each time, and it would never move.
+      towardX = 1;
     }
     if (headX * towardX + headY * towardY <= 0) continue;
     stopMoving(a.get());
