@@ -13,6 +13,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [waveshare_driver_75v2, waveshare_photopainter_73e6]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,13 +26,15 @@ jobs:
         run: python -m pip install platformio==6.2.0
       - name: Build a clean first-install image
         working-directory: esp32
+        env:
+          FIRMWARE_ENVIRONMENT: ${{ matrix.environment }}
         run: |
           cp src/config.h.example src/config.h
-          pio run -e waveshare_driver_75v2 -t release
+          pio run -e "$FIRMWARE_ENVIRONMENT" -t release
       - uses: actions/upload-artifact@v4
         with:
-          name: waveshare-driver-75v2
-          path: esp32/.pio/release/*
+          name: firmware-${{ matrix.environment }}
+          path: esp32/.pio/release/${{ matrix.environment }}/*
           if-no-files-found: error
 
   release:
@@ -41,13 +47,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: waveshare-driver-75v2
+          pattern: firmware-*
+          merge-multiple: true
           path: firmware
       - name: Prepare a draft release for hardware validation
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          cat firmware/*-SHA256SUMS > firmware/SHA256SUMS
           gh release create "$RELEASE_TAG" firmware/* \
             --verify-tag --draft --title "Wignet firmware $RELEASE_TAG" \
             --notes-file docs/flashing.md
