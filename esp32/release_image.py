@@ -33,7 +33,10 @@ def empty_littlefs(env, build):
     if partition is None:
         raise RuntimeError("LittleFS partition not found")
     offset, size = partition
-    tool = Path(env.PioPlatform().get_package_dir("tool-mklittlefs")) / (
+    tool_directory = env.PioPlatform().get_package_dir("tool-mklittlefs")
+    if tool_directory is None:
+        raise RuntimeError("PhotoPainter release requires the tool-mklittlefs package")
+    tool = Path(tool_directory) / (
         "mklittlefs.exe" if os.name == "nt" else "mklittlefs"
     )
     image = build / "release-littlefs.bin"
