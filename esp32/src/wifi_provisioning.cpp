@@ -41,6 +41,16 @@ static const int KNOWN_RETRY_PORTAL_SEC = 180;
 static WiFiManager wm;
 static void (*onAPStartCallback)(String) = nullptr;
 static unsigned long lastScanAt = 0;
+// Whether POST /wifisave has asked WiFiManager to join a network since the
+// portal opened (GET /save-status.json).
+static bool saveRequested = false;
+
+// WiFiManager's own pages behind ours: an unauthenticated firmware upload
+// (/update, /u), erasing the Wi-Fi settings (/erase), restarts, its old
+// setup and info pages. The setup network is open, so none of them may answer.
+static const char *const BLOCKED_PORTAL_PATHS[] = {
+    "/0wifi", "/info", "/param", "/paramsave", "/restart", "/exit",
+    "/close", "/erase", "/status", "/update", "/u"};
 
 struct KnownNetwork {
   char ssid[33];
@@ -234,6 +244,13 @@ static int scanNetworks(bool force) {
 // first, as {"networks":[{"ssid","rssi","secure"}]} for portal/portal.js.
 static void handleNetworks() {
   const int count = scanNetworks(wm.server->hasArg("refresh"));
+  if (count < 0) {
+    // WIFI_SCAN_FAILED: the portal says the search failed, not that no
+    // network is in range.
+    sendNoCacheHeaders();
+    wm.server->send(503, "application/json", "{\"error\":\"scan_failed\"}");
+    return;
+  }
   int kept[MAX_SCANNED_NETWORKS];
   int keptCount = 0;
   for (int i = 0; i < count && i < MAX_SCANNED_NETWORKS; i++) {
@@ -288,6 +305,31 @@ static void handleDevice() {
   wm.server->send(200, "application/json", json);
 }
 
+// GET /save-status.json: how the last Save went, for portal/portal.js.
+// WiFiManager answers POST /wifisave first, then tries the network, blocking
+// the web server; on success it closes the portal. So once a save was asked
+// for, a request answered here comes after a failed attempt:
+// {"state":"failed","reason":"password"|"not_found"|"other"}. Before any
+// save, {"state":"idle"}.
+static void handleSaveStatus() {
+  sendNoCacheHeaders();
+  if (!saveRequested) {
+    wm.server->send(200, "application/json", "{\"state\":\"idle\"}");
+    return;
+  }
+  const uint8_t result = wm.getLastConxResult();
+  // 7 is WiFiManager's own WL_STATION_WRONG_PASSWORD (a private member).
+  const char *reason = result == 7 ? "password" : result == WL_NO_SSID_AVAIL ? "not_found" : "other";
+  String json = "{\"state\":\"failed\",\"reason\":\"";
+  json += reason;
+  json += "\"}";
+  wm.server->send(200, "application/json", json);
+}
+
+static void sendNotFound() {
+  wm.server->send(404, "text/plain", "Not found");
+}
+
 static void registerPortalRoutes() {
   // Called before WiFiManager installs its routes; the web server uses the
   // first matching handler, so these replace WiFiManager's own pages.
@@ -321,6 +363,10 @@ static void registerPortalRoutes() {
   }
   wm.server->on("/networks.json", HTTP_GET, handleNetworks);
   wm.server->on("/device.json", HTTP_GET, handleDevice);
+  wm.server->on("/save-status.json", HTTP_GET, handleSaveStatus);
+  // Registered first, so they win over WiFiManager's handlers for any
+  // method; an upload to /u reaches no upload handler and is dropped.
+  for (const char *path : BLOCKED_PORTAL_PATHS) wm.server->on(path, sendNotFound);
 }
 
 static void applyLowTxPower(const char *phase) {
@@ -386,6 +432,7 @@ bool setupWiFiProvisioning(void (*apCallback)(String)) {
   wm.setAPClientCheck(true);
   wm.setWebPortalClientCheck(true);
   wm.setWebServerCallback(registerPortalRoutes);
+  wm.setPreSaveConfigCallback([]() { saveRequested = true; });
 
   // Set AP callback
   wm.setAPCallback(internalConfigModeCallback);
@@ -407,6 +454,7 @@ bool setupWiFiProvisioning(void (*apCallback)(String)) {
   bool connected = joinKnownNetwork();
   while (!connected) {
     wm.setConfigPortalTimeout(known.count ? KNOWN_RETRY_PORTAL_SEC : CONFIG_PORTAL_TIMEOUT_SEC);
+    saveRequested = false;
     if (wm.startConfigPortal(apName.c_str(), AP_PASSWORD)) {
       rememberNetwork(wm.getWiFiSSID(), wm.getWiFiPass());
       connected = true;

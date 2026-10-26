@@ -23,6 +23,21 @@ target builds it, and a new board must keep it (`HARDWARE.md`).
    is up instead of waiting in setup. A Wignet that knows no network keeps
    its portal open until one is saved.
 
+## The setup portal
+
+- The access point is open, so the portal answers only its own pages
+  (`registerPortalRoutes()` in `wifi_provisioning.cpp`): WiFiManager's
+  firmware upload (`/update`, `/u`), `/erase`, `/restart`, `/exit`, `/close`,
+  `/info`, `/param`, `/paramsave`, `/status` and `/0wifi` answer 404.
+- Save posts to WiFiManager's `/wifisave`, which answers before trying the
+  network. The page keeps saying "Connecting…" and asks
+  `/save-status.json`: a failed try reopens the portal, which answers
+  `{"state":"failed","reason":"password"|"not_found"|"other"}`, and the page
+  goes back to the form with the reason. A success closes the portal; after
+  40 s without an answer the page says the settings are saved.
+- `/networks.json` answers 503 when the scan fails, so the page says the
+  search failed rather than that no network is in range.
+
 ## While running
 
 Wi-Fi lost: the firmware asks for the same network again every 10 s; after a

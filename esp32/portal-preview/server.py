@@ -29,11 +29,17 @@ NETWORKS = (
     {"ssid": "FreeWifi", "rssi": -86, "secure": False},
 )
 ROUTES = {route: (PORTAL / name, content_type) for route, name, content_type in ASSETS}
+# SSIDs that stand in for a failed join, with the reason the device reports.
+FAILED_JOINS = {"wrong-password": "password", "not-found": "not_found"}
 
 
 class PreviewHandler(BaseHTTPRequestHandler):
     server_version = "WignetPortalPreview/2.0"
     no_networks = False
+    scan_fails = False
+    # The reason the last save failed, None while it "joined" (the device's
+    # portal closes then), "" before any save.
+    save_failure: str | None = ""
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib API
         parsed = urlparse(self.path)
@@ -43,8 +49,18 @@ class PreviewHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/networks.json":
             if "refresh" in parse_qs(parsed.query):
                 time.sleep(1.2)  # a real scan takes a couple of seconds
+            if self.scan_fails:
+                self.send_json({"error": "scan_failed"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
             networks = [] if self.no_networks else list(NETWORKS)
             self.send_json({"networks": networks})
+        elif parsed.path == "/save-status.json":
+            failure = PreviewHandler.save_failure
+            if failure is None:
+                # Joined: the device's access point is gone, nothing answers.
+                self.close_connection = True
+                return
+            self.send_json({"state": "failed", "reason": failure} if failure else {"state": "idle"})
         elif parsed.path == "/device.json":
             self.send_json({"ap": AP_NAME})
         else:
@@ -60,20 +76,21 @@ class PreviewHandler(BaseHTTPRequestHandler):
         if ssid == "fail":  # exercise the portal's retry path
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
             return
-        # WiFiManager answers with its own page; the portal only checks for 200.
-        # Credentials are not stored.
+        # WiFiManager answers with its own page, then tries the network; the
+        # portal asks /save-status.json how it went. Credentials are not stored.
+        PreviewHandler.save_failure = FAILED_JOINS.get(ssid)
         self.send_body(b"<!doctype html><title>Credentials saved</title>", "text/html; charset=utf-8")
 
-    def send_body(self, body: bytes, content_type: str) -> None:
-        self.send_response(HTTPStatus.OK)
+    def send_body(self, body: bytes, content_type: str, status: HTTPStatus = HTTPStatus.OK) -> None:
+        self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
 
-    def send_json(self, value: object) -> None:
-        self.send_body(json.dumps(value, ensure_ascii=False).encode("utf-8"), "application/json")
+    def send_json(self, value: object, status: HTTPStatus = HTTPStatus.OK) -> None:
+        self.send_body(json.dumps(value, ensure_ascii=False).encode("utf-8"), "application/json", status)
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[portal-preview] {self.address_string()} {format % args}")
@@ -84,8 +101,10 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=4173)
     parser.add_argument("--no-networks", action="store_true", help="answer every scan with an empty list")
+    parser.add_argument("--scan-fails", action="store_true", help="answer every scan with 503, as a failed scan")
     args = parser.parse_args()
     PreviewHandler.no_networks = args.no_networks
+    PreviewHandler.scan_fails = args.scan_fails
     server = ThreadingHTTPServer((args.host, args.port), PreviewHandler)
     print(f"Wignet portal preview: http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop.")

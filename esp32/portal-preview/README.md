@@ -14,8 +14,9 @@ From the repository root:
 python3 esp32/portal-preview/server.py
 ```
 
-Then open <http://127.0.0.1:4173>. Use `--port 8080` to choose another port and
-`--no-networks` to see the empty-scan state. To test from a phone on the same
+Then open <http://127.0.0.1:4173>. Use `--port 8080` to choose another port,
+`--no-networks` to see the empty-scan state and `--scan-fails` for a failed
+scan. To test from a phone on the same
 local network, bind explicitly:
 
 ```sh
@@ -32,17 +33,25 @@ exposes the preview to the local network, so stop the server when finished.
 | `/`, `/wifi` | `portal/wifi.html`: network selection | same file |
 | `/connect?ssid=…&secure=1` or `?manual=1` | `portal/connect.html`: credentials, then the saved view | same file |
 | `/static/*.css`, `/static/portal.js` | embedded assets | same files |
-| `GET /networks.json[?refresh=1]` | scan, strongest entry per SSID: `{"networks":[{"ssid","rssi","secure"}]}` | sample networks |
+| `GET /networks.json[?refresh=1]` | scan, strongest entry per SSID: `{"networks":[{"ssid","rssi","secure"}]}`; 503 when the scan fails | sample networks; `--scan-fails`: 503 |
 | `GET /device.json` | `{"ap":"Wignet-XXXX"}` | `Wignet-0002` |
 | `POST /wifisave` (`s`, `p`) | WiFiManager saves and connects | 200, nothing stored; SSID `fail` returns 500 |
+| `GET /save-status.json` | after a failed join `{"state":"failed","reason":"password"\|"not_found"\|"other"}`; after a join, gone with the access point | SSIDs `wrong-password` and `not-found` fail; any other "joins" and stops answering |
 
 The save button sends the `s`/`p` POST with `fetch` instead of submitting a
 website login form, so browsers do not offer to remember the Wi-Fi key as a
 site password. The field is cleared while sending; after a failure, a secured
 network needs the password typed again before **Retry** is enabled. On a 200
-response the page switches to its saved view in place: WiFiManager answers
-before it tries to connect, and the phone may leave the access point soon
-after. Browsers without `fetch` fall back to the native form.
+response the page keeps saying "Connecting…": WiFiManager answers before it
+tries the network and answers nothing while it does. The page asks
+`/save-status.json` every 2.5 s: a failed join reopens the portal, which says
+why, and the page goes back to the form with the reason. A join closes the
+portal for good, so after 40 s without an answer the page switches to its
+saved view, and still returns to the form if a failure is reported later.
+Browsers without `fetch` fall back to the native form.
+
+The setup network is open, so the device answers 404 to WiFiManager's own
+pages behind these routes (firmware upload, erase, restart…, `docs/wifi.md`).
 
 ## Language
 

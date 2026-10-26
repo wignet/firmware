@@ -39,6 +39,9 @@
       "connect.retry": "Retry",
       "connect.errorSecure": "Connection interrupted. Enter the password again if the Wignet network is still visible.",
       "connect.errorOpen": "Connection interrupted. Try again if the Wignet network is still visible.",
+      "connect.failedPassword": "Couldn’t join {ssid}: wrong password. Enter it again.",
+      "connect.failedNotFound": "{ssid} wasn’t found. Check that it is in range and on 2.4 GHz, then try again.",
+      "connect.failedOther": "Couldn’t join {ssid}. Check the password and try again.",
       "saved.title": "Wi‑Fi saved",
       "saved.connecting": "Connecting",
       "saved.joining": "Your Wignet is now trying to join <strong>{ssid}</strong>.",
@@ -83,6 +86,9 @@
       "connect.retry": "Réessayer",
       "connect.errorSecure": "Connexion interrompue. Saisissez à nouveau le mot de passe si le réseau Wignet est encore visible.",
       "connect.errorOpen": "Connexion interrompue. Réessayez si le réseau Wignet est encore visible.",
+      "connect.failedPassword": "Impossible de rejoindre {ssid} : mot de passe incorrect. Saisissez-le à nouveau.",
+      "connect.failedNotFound": "{ssid} est introuvable. Vérifiez qu’il est à portée et en 2,4 GHz, puis réessayez.",
+      "connect.failedOther": "Impossible de rejoindre {ssid}. Vérifiez le mot de passe et réessayez.",
       "saved.title": "Wi‑Fi enregistré",
       "saved.connecting": "Connexion en cours",
       "saved.joining": "Votre Wignet essaie maintenant de rejoindre <strong>{ssid}</strong>.",
@@ -251,7 +257,8 @@
     const submitLabel = submit.querySelector(".submit-label");
     const showPassword = document.querySelector(".show-password");
     let submitKey = "connect.submit";
-    let errorShown = false;
+    let errorKey = null;
+    let errorSsid = "";
 
     ssid.value = chosen;
     document.querySelector("#ssid-field").hidden = !manual;
@@ -265,7 +272,7 @@
       submitLabel.textContent = t(submitKey);
       showPassword.textContent = t(password.type === "text" ? "connect.hide" : "connect.show");
       const error = document.querySelector("#save-error");
-      if (error && errorShown) error.textContent = t(secure ? "connect.errorSecure" : "connect.errorOpen");
+      if (error && errorKey) error.textContent = fill(t(errorKey), { ssid: errorSsid }, false);
     };
 
     function updateSubmit() {
@@ -294,6 +301,71 @@
       window.scrollTo(0, 0);
     }
 
+    function showConnect() {
+      document.querySelector("#saved-view").hidden = true;
+      document.querySelector("#connect-view").hidden = false;
+      document.title = t("title.connect");
+      document.querySelector("title").dataset.i18n = "title.connect";
+      applyLang();
+    }
+
+    function showError(key, name) {
+      submitKey = "connect.retry";
+      errorKey = key;
+      errorSsid = name;
+      const error = document.querySelector("#save-error") || document.createElement("p");
+      error.id = "save-error";
+      error.className = "hint";
+      submit.after(error);
+      refreshDynamicText();
+      updateSubmit();
+    }
+
+    // After Save the Wignet tries the network for about 25 s and answers
+    // nothing meanwhile (WiFiManager blocks its web server). A failure
+    // reopens the portal, which then says why (/save-status.json); a success
+    // closes it for good. The phone may also lose the Wignet's network while
+    // the chip changes channel to try the router, so: keep asking, call it
+    // joined after JOINED_AFTER_MS without an answer, and still go back to the
+    // form if a failure is reported later.
+    const STATUS_EVERY_MS = 2500;
+    const STATUS_TIMEOUT_MS = 4000;
+    const JOINED_AFTER_MS = 40000;
+    const STATUS_FOR_MS = 180000;
+    const FAILURES = { password: "connect.failedPassword", not_found: "connect.failedNotFound" };
+
+    function getSaveStatus() {
+      const controller = window.AbortController ? new AbortController() : null;
+      const timer = controller && setTimeout(() => controller.abort(), STATUS_TIMEOUT_MS);
+      return fetch("/save-status.json", { cache: "no-store", signal: controller ? controller.signal : undefined })
+        .then((response) => {
+          if (!response.ok) throw new Error("save-status");
+          return response.json();
+        })
+        .finally(() => clearTimeout(timer));
+    }
+
+    async function awaitJoin(name) {
+      const started = Date.now();
+      let savedShown = false;
+      while (Date.now() - started < STATUS_FOR_MS) {
+        await new Promise((resolve) => setTimeout(resolve, STATUS_EVERY_MS));
+        let status = null;
+        try {
+          status = await getSaveStatus();
+        } catch { /* busy trying the network, gone, or out of the phone's reach */ }
+        if (status && status.state === "failed") {
+          if (savedShown) showConnect();
+          showError(FAILURES[status.reason] || "connect.failedOther", name);
+          return;
+        }
+        if (!savedShown && Date.now() - started >= JOINED_AFTER_MS) {
+          showSaved(name);
+          savedShown = true;
+        }
+      }
+    }
+
     // A website form submission can trigger a "remember password" prompt.
     // Send the Wi-Fi key to the same endpoint without submitting the form.
     // The field is cleared while sending; after a failure a secured network
@@ -311,17 +383,11 @@
       try {
         const response = await fetch(form.action, { method: "POST", body });
         if (!response.ok) throw new Error("Save failed");
-        showSaved(name);
       } catch {
-        submitKey = "connect.retry";
-        const error = document.querySelector("#save-error") || document.createElement("p");
-        error.id = "save-error";
-        error.className = "hint";
-        errorShown = true;
-        submit.after(error);
-        refreshDynamicText();
-        updateSubmit();
+        showError(secure ? "connect.errorSecure" : "connect.errorOpen", name);
+        return;
       }
+      awaitJoin(name);
     }
 
     if (window.fetch && window.FormData && window.URLSearchParams) {
