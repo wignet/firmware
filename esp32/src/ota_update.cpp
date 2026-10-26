@@ -115,6 +115,8 @@ void download(const String &url, size_t size, const char *sha) {
   config.timeout_ms = 10000;
   config.disable_auto_redirect = true;
   config.buffer_size = 4096;
+  // The default 512-byte request buffer cannot hold signed artifact URLs.
+  config.buffer_size_tx = 2048;
   auto client = esp_http_client_init(&config);
   if (!client) { error("HTTP allocation failed"); return; }
   esp_http_client_set_header(client, "Accept-Encoding", "identity");
