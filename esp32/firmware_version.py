@@ -45,6 +45,8 @@ BUILD_INPUTS = (
     "embed_portal.py",
     "optimize_gxepd2.py",
     "firmware_version.py",
+    "partitions",
+    "ota_package.py",
 )
 
 

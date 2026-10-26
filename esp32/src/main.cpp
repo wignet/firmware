@@ -17,6 +17,7 @@
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
 #include "usb_console.h"
+#include "ota_update.h"
 #include "board.h"
 
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6) || defined(WIGNET_BATTERY_ADC_PIN)
@@ -714,6 +715,7 @@ int fetchSchedule() {
 
   if (httpCode == HTTP_CODE_OK) {
     String payload = http.getString();
+    Ota::scheduleReceived(payload);
     // With the list of sounds and its tunes the answer runs to kilobytes:
     // log its start only.
     if (payload.length() > 600) {
@@ -794,6 +796,9 @@ void waitForSound() {
 
 // `evenOnUsb`: the USB bench's "sleep" (benchSleep), to test a real wake.
 void enterDeepSleep(int seconds, bool evenOnUsb = false) {
+  // An unconfirmed image must stay awake until confirmation or the independent
+  // deadline rolls it back; sleeping first would count as a failed trial boot.
+  if (Ota::holding()) return;
 #if defined(WIGNET_ALWAYS_POWERED)
   // Plugged in, and an LCD shows nothing asleep: stay awake and sync at the
   // platform's powered cadence (loop()). Battery sleep comes later.
@@ -889,6 +894,7 @@ void benchResume() { benchHold = false; }
 
 // True while a bench image holds the panel; logs once when the hold ends.
 bool benchHolding() {
+  if (Ota::holding()) return true;
   if (!benchHold) return false;
   if (static_cast<long>(millis() - benchHoldUntilMs) < 0) return true;
   benchHold = false;
@@ -1120,6 +1126,7 @@ bool fetchWignetImage() {
       fetchWignetRepresentation(url, preferColor, true, info);
   if (result == ImageRequestResult::Displayed ||
       result == ImageRequestResult::NotModified) {
+    Ota::imageReceived();
     return true;
   }
 
@@ -1392,6 +1399,16 @@ void drawCenteredBuiltInLine(const String &line, int y, int textSize) {
 }
 
 void displayText(String text, int rotation = 0, bool blackBackground = false);
+
+#if defined(WIGNET_OTA_BENCH)
+void otaNotice() {
+  // The status replaces the panel. Force the next regular fetch to redraw it
+  // after an aborted transfer rather than accepting a cached 304 forever.
+  etagValidThisBoot = false;
+  memset(rtcLastEtag, 0, sizeof(rtcLastEtag));
+  displayText("Updating firmware...\nKeep USB power connected", getDefaultDisplayRotation());
+}
+#endif
 
 #if defined(WIGNET_BENCH_AUDIO)
 // USB bench "ringdraw": a full refresh of the panel while the sound plays.
@@ -2034,6 +2051,10 @@ void setup() {
 #endif
   Serial.begin(115200);
   Serial.println("\n[Boot] Firmware " WIGNET_FW_VERSION);
+  Ota::begin(); // arm trial deadline before display / blocking Wi-Fi setup
+#if defined(WIGNET_OTA_BENCH)
+  Ota::setNoticeHandler(otaNotice);
+#endif
   StatusLED::begin();
 
 #if defined(WIGNET_HAS_AUDIO)

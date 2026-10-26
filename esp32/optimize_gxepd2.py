@@ -7,6 +7,8 @@ Import("env")
 EXPECTED_DRIVERS = {
     "waveshare_photopainter_73e6": {"GxEPD2_730c_GDEP073E01"},
     "waveshare_driver_75v2": {"GxEPD2_750_T7"},
+    "waveshare_driver_75v2_ota": {"GxEPD2_750_T7"},
+    "waveshare_driver_75v2_ota_reject": {"GxEPD2_750_T7"},
     "waveshare_driver_75v2_clear_wifi": {"GxEPD2_750_T7"},
     "waveshare_driver_75v2_no_default_wifi": {"GxEPD2_750_T7"},
     "firebeetle_75v2": {"GxEPD2_750_T7"},

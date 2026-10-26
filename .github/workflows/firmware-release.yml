@@ -11,6 +11,33 @@ permissions:
   contents: read
 
 jobs:
+  ota-bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check OTA compatibility policy and packaging
+        working-directory: esp32
+        run: |
+          python -m unittest discover -s tests -p 'test_ota*.py'
+          c++ -std=c++11 -Wall -Wextra -Werror -Isrc tests/ota_image_test.cpp -o /tmp/ota-image-test
+          /tmp/ota-image-test
+      - name: Compile experimental OTA and rollback fault image
+        working-directory: esp32
+        run: |
+          python -m pip install platformio==6.2.0
+          cp src/config.h.example src/config.h
+          pio run -e waveshare_driver_75v2_ota -e waveshare_driver_75v2_ota_reject
+          python tests/check_ota_build.py .pio/build/waveshare_driver_75v2_ota
+          python tests/check_ota_build.py .pio/build/waveshare_driver_75v2_ota_reject
+      - uses: actions/upload-artifact@v4
+        with:
+          name: experimental-75v2-ota-bench
+          path: esp32/.pio/ota/*/*
+          if-no-files-found: error
+
   build:
     runs-on: ubuntu-latest
     steps:

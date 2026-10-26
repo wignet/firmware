@@ -71,6 +71,13 @@ against a maintained CA bundle (do not pin the leaf certificate: it renews
 automatically), and be checked on each board for clock setup, memory,
 timeouts and sleep/wake.
 
+An opt-in Waveshare 7.5 V2 OTA bench target is described in
+[docs/ota-bench.md](docs/ota-bench.md). Normal polling remains unchanged;
+only a physical USB command can authorize a firmware download, with its exact
+size and SHA-256. That bench command may name a direct external HTTPS test
+host with a public-CA certificate. It consumes no update offers from HTTP
+schedule responses and declares no OTA capability yet.
+
 ## What a device declares on `/schedule`
 
 These parameters go on **`/schedule` only**, never on the image request.

@@ -8,6 +8,12 @@ power and audio rules brought up to date 2026-10-20.
 
 ## A firmware works when it has been seen working on hardware
 
+The experimental Waveshare ESP32 7.5 V2 OTA target, its 4 MiB partition
+layout, application compatibility descriptor, USB migration and rollback
+bench procedure are documented in [docs/ota-bench.md](docs/ota-bench.md).
+It remains opt-in until the physical checks there have passed; it is not
+an automatic update service or a validated release.
+
 A build that compiles proves nothing about a panel. Before calling a target
 done:
 

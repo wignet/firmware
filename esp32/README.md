@@ -6,6 +6,10 @@ e-paper displays for the Wignet image polling system.
 Before changing server URLs or preparing a firmware release, read the
 [device API](../DEVICE_API.md). The device host is `api.wignet.app`.
 
+Experimental application updates and rollback on the Waveshare ESP32 7.5 V2:
+[OTA bench](../docs/ota-bench.md). This opt-in target needs one initial USB
+installation of its larger partition layout; the ordinary target is unchanged.
+
 ## Prerequisites
 
 ### Software

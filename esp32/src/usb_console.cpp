@@ -4,6 +4,10 @@
 
 #include <Arduino.h>
 #include "power_hal.h"
+#include "ota_update.h"
+#if defined(WIGNET_OTA_BENCH)
+#include "ota_image.h"
+#endif
 #if defined(WIGNET_BENCH_AUDIO)
 #include "alarm_clock_hal.h"
 #include "audio_hal.h"
@@ -407,6 +411,11 @@ void help() {
 #endif
   Serial.println("[bench]   resume              let the platform refresh the panel again");
   Serial.println("[bench]   power               power source and battery, as /schedule reports them");
+#if defined(WIGNET_OTA_BENCH)
+  Serial.println("[bench]   ota status|hold|resume|reject   OTA state and bench hold");
+  Serial.println("[bench]   ota <bytes> <sha256> <https-url>   USB-authorized Wi-Fi download");
+  Serial.println("[bench]   ota-image <bytes> <sha256>   application in acknowledged 4 KB chunks");
+#endif
 #if defined(WIGNET_BENCH_AUDIO)
   Serial.println("[bench]   i2c [reset]         bus state and scan; reset = 9-clock recovery");
 #endif
@@ -426,6 +435,28 @@ void handle(String text) {
   const String args = space < 0 ? String() : text.substring(space + 1);
   if (command == "image") {
     image(args);
+#if defined(WIGNET_OTA_BENCH)
+  } else if (command == "ota") {
+    Ota::command(args);
+  } else if (command == "ota-image") {
+    const int split = args.indexOf(' ');
+    const String number = args.substring(0, split);
+    bool valid = split > 0 && number.length() <= 7;
+    for (unsigned i = 0; i < number.length(); ++i) valid &= isDigit(number[i]);
+    const size_t size = strtoul(number.c_str(), nullptr, 10);
+    uint8_t digest[32];
+    if (!valid || size < OtaImage::PREFIX_SIZE || size > OtaImage::SLOT_SIZE ||
+        Ota::pending() || !OtaImage::parseSha256(args.substring(split + 1).c_str(), digest)) {
+      Serial.println("[bench] error invalid OTA size");
+      return;
+    }
+    Serial.println("[bench] OTA ready: send application in 4096-byte chunks");
+    Serial.flush();
+    ChunkedUsbStream stream(size);
+    const bool installed = Ota::writeImage(stream, size, args.substring(split + 1).c_str());
+    stream.drain();
+    if (installed) { Serial.flush(); ESP.restart(); }
+#endif
   } else if (command == "resume") {
     if (resumeHandler) resumeHandler();
     Serial.println("[bench] platform refresh resumed");
