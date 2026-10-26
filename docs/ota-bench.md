@@ -97,6 +97,14 @@ ESP image validation succeed does it change the boot partition. A failed or
 interrupted transfer must retain the original boot selection. The notice
 invalidates the image cache so the next normal fetch restores the display.
 
+USB OTA acknowledgements are deliberately deferred until the writer requests
+the next block, after flash erase/write. The first complete 4 KiB block is
+received before erase begins: ESP32 flash operations can suspend UART
+interrupts, so acknowledging early loses bytes even with a 4 KiB RX buffer.
+The ordinary image-transfer protocol keeps its original acknowledgement timing.
+The host retries its initial hold command because opening a UART bridge may
+reset the board and discard a command sent during startup.
+
 ## Trial boot and rollback
 
 The SDK must enable `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`; the firmware
@@ -110,6 +118,9 @@ successfully (or a valid cached 304) and a parsed schedule with a positive integ
 `nextRefreshSec`. The deadline rejects/reboots an unconfirmed application even
 when the main loop is blocked. A crash/reset before confirmation also lets the
 rollback-enabled bootloader choose the previous valid app.
+
+A pending trial prevents sleep but must not enable the bench hold that pauses
+normal polling; otherwise it could never fetch the image needed to confirm.
 
 Build `waveshare_driver_75v2_ota_reject` for fault injection. It has the same board
 and layout contract but intentionally never confirms. Install it **through the

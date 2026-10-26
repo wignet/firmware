@@ -798,7 +798,7 @@ void waitForSound() {
 void enterDeepSleep(int seconds, bool evenOnUsb = false) {
   // An unconfirmed image must stay awake until confirmation or the independent
   // deadline rolls it back; sleeping first would count as a failed trial boot.
-  if (Ota::holding()) return;
+  if (Ota::pending() || Ota::holding()) return;
 #if defined(WIGNET_ALWAYS_POWERED)
   // Plugged in, and an LCD shows nothing asleep: stay awake and sync at the
   // platform's powered cadence (loop()). Battery sleep comes later.

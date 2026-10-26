@@ -94,7 +94,9 @@ void download(const String &url, size_t size, const char *sha) {
     error("invalid request, trial state or partition layout");
     return;
   }
-  if (!url.startsWith("https://") || url.length() > 768 ||
+  // Direct, temporary artifact URLs can carry a signed query string.
+  // Stay below the USB console line budget including size/hash/command.
+  if (!url.startsWith("https://") || url.length() > 1536 ||
       url.indexOf('@') >= 0 || url.indexOf(' ') >= 0 ||
       url.indexOf('\r') >= 0 || url.indexOf('\n') >= 0 ||
       WiFi.status() != WL_CONNECTED) {
@@ -148,7 +150,6 @@ void begin() {
 }
 bool pending() { return trial; }
 bool holding() {
-  if (trial) return true;
   if (holdUntil && static_cast<int32_t>(holdUntil - millis()) > 0) return true;
   holdUntil = 0;
   return false;
@@ -168,11 +169,14 @@ bool writeImage(Stream &source, size_t size, const char *sha256) {
   uint8_t expected[32];
   if (trial || !layoutValid() || size < OtaImage::PREFIX_SIZE || size > OtaImage::SLOT_SIZE ||
       !OtaImage::parseSha256(sha256, expected)) return error("invalid size, hash, trial or layout");
-  uint8_t prefix[OtaImage::PREFIX_SIZE];
-  if (source.readBytes(reinterpret_cast<char *>(prefix), sizeof(prefix)) != sizeof(prefix) ||
-      !OtaImage::compatible(prefix, sizeof(prefix))) return error("incompatible/truncated image prefix");
   std::unique_ptr<uint8_t[]> buffer(new (std::nothrow) uint8_t[4096]);
   if (!buffer) return error("no transfer buffer");
+  // Receive the entire first USB chunk before erasing flash. The transport
+  // withholds its acknowledgement until the next read, after erase/write,
+  // so a sender never overruns the UART while flash interrupts are masked.
+  const size_t first = min(size_t(4096), size);
+  if (source.readBytes(reinterpret_cast<char *>(buffer.get()), first) != first ||
+      !OtaImage::compatible(buffer.get(), first)) return error("incompatible/truncated image prefix");
   const auto *partition = esp_ota_get_next_update_partition(nullptr);
   if (!partition || partition->address == esp_ota_get_running_partition()->address ||
       partition->size != OtaImage::SLOT_SIZE) return error("no inactive slot");
@@ -183,15 +187,18 @@ bool writeImage(Stream &source, size_t size, const char *sha256) {
   mbedtls_sha256_context hash;
   mbedtls_sha256_init(&hash);
   bool ok = mbedtls_sha256_starts_ret(&hash, 0) == 0 &&
-      mbedtls_sha256_update_ret(&hash, prefix, sizeof(prefix)) == 0 &&
-      esp_ota_write(handle, prefix, sizeof(prefix)) == ESP_OK;
-  size_t received = sizeof(prefix);
+      mbedtls_sha256_update_ret(&hash, buffer.get(), first) == 0;
+  esp_err_t writeResult = esp_ota_write(handle, buffer.get(), first);
+  ok = ok && writeResult == ESP_OK;
+  size_t received = first;
   const uint32_t started = millis();
   while (ok && received < size && millis() - started < 300000) {
     const size_t wanted = min(size_t(4096), size - received);
     const size_t n = source.readBytes(reinterpret_cast<char *>(buffer.get()), wanted);
+    if (n != wanted) Serial.printf("[OTA] Short read at %u: got %u / %u bytes\n",
+        unsigned(received), unsigned(n), unsigned(wanted));
     ok = n == wanted && mbedtls_sha256_update_ret(&hash, buffer.get(), n) == 0 &&
-        esp_ota_write(handle, buffer.get(), n) == ESP_OK;
+        (writeResult = esp_ota_write(handle, buffer.get(), n)) == ESP_OK;
     received += n;
     delay(1);
   }
@@ -200,6 +207,8 @@ bool writeImage(Stream &source, size_t size, const char *sha256) {
       memcmp(actual, expected, sizeof(actual)) == 0;
   mbedtls_sha256_free(&hash);
   if (!ok) {
+    Serial.printf("[OTA] Rejected at %u / %u bytes, flash=%s\n",
+        unsigned(received), unsigned(size), esp_err_to_name(writeResult));
     esp_ota_abort(handle);
     return error("transfer, SHA-256 or deadline failed; boot slot unchanged");
   }

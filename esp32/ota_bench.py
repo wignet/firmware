@@ -42,6 +42,18 @@ def wait(port, prefix, timeout):
     raise TimeoutError(f"no {prefix!r} within {timeout} seconds")
 
 
+def hold(port):
+    # Opening a UART bridge can reset the ESP32 despite idle DTR/RTS.
+    # A command sent during reset is lost; retry while setup/redraw completes.
+    for _ in range(30):
+        port.write(b"ota hold\n")
+        try:
+            return wait(port, "[bench] OTA slot=", 3)
+        except TimeoutError:
+            pass
+    raise TimeoutError("OTA console did not answer within 90 seconds")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
@@ -66,8 +78,7 @@ def main():
     port.dtr = port.rts = False
     port.open()
     try:
-        port.write(b"ota hold\n")
-        initial = wait(port, "[bench] OTA slot=", 90)
+        initial = hold(port)
         if "trial=0" not in initial or "layout=ota-4m-v1" not in initial:
             raise RuntimeError("install requires a confirmed application with the OTA layout")
         initial_slot = initial.split("slot=", 1)[1].split()[0]

@@ -43,7 +43,8 @@ constexpr long MAX_IMAGE_BYTES = 256 * 1024;
 // Over a UART bridge at 115200 baud a 1-bit 800x480 BMP takes about 4 s.
 class ChunkedUsbStream : public Stream {
 public:
-  explicit ChunkedUsbStream(size_t length) : remaining_(length) { setTimeout(10000); }
+  explicit ChunkedUsbStream(size_t length, bool deferAck = false)
+      : remaining_(length), deferAck_(deferAck) { setTimeout(10000); }
   int available() override {
     return static_cast<int>(min(static_cast<size_t>(Serial.available()), remaining_));
   }
@@ -56,6 +57,10 @@ public:
   int peek() override { return remaining_ ? Serial.peek() : -1; }
   size_t write(uint8_t) override { return 0; }
   size_t readBytes(char *buffer, size_t length) override {
+    if (ackPending_) {
+      acknowledge();
+      ackPending_ = false;
+    }
     size_t got = 0;
     uint32_t lastData = millis();
     while (got < length && remaining_) {
@@ -65,6 +70,7 @@ public:
         got += n;
         consumed(n);
         lastData = millis();
+        if (ackPending_) break;
       } else if (millis() - lastData > _timeout) {
         break;
       } else {
@@ -84,20 +90,28 @@ public:
   uint32_t lastByteMs() const { return lastByteMs_; }
 
 private:
+  void acknowledge() {
+    Serial.println("[bench] +");
+    Serial.flush();
+  }
   void consumed(size_t n) {
     remaining_ -= n;
     chunkLeft_ -= n;
     if (!remaining_) {
       lastByteMs_ = millis();
     } else if (!chunkLeft_) {
-      Serial.println("[bench] +");
-      Serial.flush();
+      // Flash erase/write can suspend UART interrupts. For OTA, authorize
+      // the next chunk only when the writer asks for it after flash work.
+      if (deferAck_) ackPending_ = true;
+      else acknowledge();
       chunkLeft_ = IMAGE_CHUNK;
     }
   }
   size_t remaining_;
   size_t chunkLeft_ = IMAGE_CHUNK;
   uint32_t lastByteMs_ = 0;
+  bool deferAck_ = false;
+  bool ackPending_ = false;
 };
 
 #if defined(WIGNET_BENCH_AUDIO)
@@ -452,7 +466,7 @@ void handle(String text) {
     }
     Serial.println("[bench] OTA ready: send application in 4096-byte chunks");
     Serial.flush();
-    ChunkedUsbStream stream(size);
+    ChunkedUsbStream stream(size, true);
     const bool installed = Ota::writeImage(stream, size, args.substring(split + 1).c_str());
     stream.drain();
     if (installed) { Serial.flush(); ESP.restart(); }
