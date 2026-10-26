@@ -318,6 +318,14 @@ same decoder as downloads, with no Wi-Fi or server involved. Scripts in
 (colour test cards), `play_mml.py` and `test_alarm.py` (audio and alarm
 boards). See `esp32/README.md` for usage.
 
+It stays in production builds, on purpose (decided 2026-10-26,
+fablamenas/wignet#56): it answers only over USB, so only someone holding the
+board reaches it, and it is how a Wignet in the field is checked on the bench
+without reflashing it first. What it costs, as noted in that issue: the USB
+serial port always listening, and about 2 KB of RTC memory. A command that
+would reach the network or change the board's settings needs that decision
+taken again.
+
 `ringdraw [draws] [volume]`, on the PhotoPainter, plays the last tune (the
 tone without one) in the audio task while the loop redraws the panel, then
 answers
