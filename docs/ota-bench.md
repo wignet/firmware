@@ -126,6 +126,21 @@ backward compatibility.
 
 ## Validation record and remaining work
 
+Hardware session, 2026-10-26, application commit `6b3aad67053c`:
+
+- Connected board identified over USB as ESP32-D0WD-V3 revision 3.1,
+  with 4 MiB flash.
+- A complete 4 MiB recovery backup was read and its copied checksum verified;
+  the backup remains private and outside Git.
+- Initial USB installation completed successfully. A monitored reset reports
+  `layout=ota-4m-v1 slot=app0 trial=0`, and the display HAL initializes at
+  800x480.
+- The device entered its Wi-Fi setup portal. Network configuration is required
+  before testing image/schedule confirmation and rollback. Preservation of
+  usable saved Wi-Fi configuration is therefore **not yet validated**.
+- No successful application transfer, trial confirmation, rollback or runtime
+  TLS memory measurement is claimed at this stage.
+
 Host checks cover truncated/mismatched descriptors, wrong chip, malformed hashes,
 manifest/artifact integrity, partition boundaries and actual linked rollback/TLS
 symbols. CI builds both experimental images independently of release packaging.
