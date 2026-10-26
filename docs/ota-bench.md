@@ -137,38 +137,71 @@ backward compatibility.
 
 ## Validation record and remaining work
 
-Hardware session, 2026-10-26, application commit `6b3aad67053c`:
+Hardware session, 2026-10-26, final application commit `f0c02986eefc`:
 
-- Connected board identified over USB as ESP32-D0WD-V3 revision 3.1,
-  with 4 MiB flash.
-- A complete 4 MiB recovery backup was read and its copied checksum verified;
-  the backup remains private and outside Git.
-- Initial USB installation completed successfully. A monitored reset reports
-  `layout=ota-4m-v1 slot=app0 trial=0`, and the display HAL initializes at
-  800x480.
-- The device entered its Wi-Fi setup portal. Network configuration is required
-  before testing image/schedule confirmation and rollback. Preservation of
-  usable saved Wi-Fi configuration is therefore **not yet validated**.
-- No successful application transfer, trial confirmation, rollback or runtime
-  TLS memory measurement is claimed at this stage.
+| Measurement | Result |
+| --- | --- |
+| Board identified over USB | ESP32-D0WD-V3 revision 3.1, 4 MiB flash |
+| Normal application-only binary | 1,251,248 bytes |
+| Each application slot | 1,835,008 bytes (1.75 MiB) |
+| Spare flash per normal application slot | 583,760 bytes (about 570 KiB) |
+| Free heap before real HTTPS update | 183,148 bytes; largest block 110,580 bytes |
+| Free heap after TLS setup | 121,880 bytes; largest block 73,716 bytes |
 
-Host checks cover truncated/mismatched descriptors, wrong chip, malformed hashes,
-manifest/artifact integrity, partition boundaries and actual linked rollback/TLS
-symbols. CI builds both experimental images independently of release packaging.
+The TLS figures are from the working update connection before allocation of the
+4 KiB streaming buffer. Both the normal and fault-injection applications were
+built from the recorded source commit; full application and partition/link
+checks passed. No private backup, credentials, device identifiers, signed URLs
+or serial logs are stored in Git.
 
-Hardware validation is still required before declaring this target supported:
+Passed on the connected board:
 
-1. Initial USB installation preserves Wi-Fi, MAC and owner identity.
-2. Normal 800x480 1-bit BMP, 304 without redraw, valid cadence, sleep/wake and
-   failed request preserving the previous image.
-3. Application transfer switches slots and confirms after image + schedule.
-4. Interrupted transfer, wrong SHA-256, wrong target/layout and oversize input
-   keep the previous application bootable.
-5. Fault-injection image and reset before confirmation return to the original
-   slot, including recovery of ordinary polling and display.
-6. HTTPS download succeeds with measured heap margin; invalid certificate,
-   redirect, missing/wrong length and truncated body are rejected.
-7. Power loss during download and around activation recovers correctly.
+- Complete private 4 MiB recovery backup, with copied checksum verified;
+  initial USB installation and the new partition layout recognized at boot.
+- Same hardware MAC before and after installation. The initial installation
+  opened the setup portal; after configuration, Wi-Fi survived subsequent
+  resets and USB/OTA installs. Usability of the *original* saved networks was
+  not established before reconfiguration.
+- Normal 800x480 BMP processing, a cached `304` without redraw, schedule
+  cadence and timed deep sleep/wake observed in the device log.
+- Full USB application transfer, slot switch, fresh image processing and
+  confirmation after image plus valid schedule.
+- Full Wi-Fi update over verified HTTPS, SHA-256 validation, slot switch and
+  confirmation after image plus valid schedule.
+- Oversize request, wrong board descriptor, interrupted USB transfer and wrong
+  SHA-256 rejected, each followed by a status check of the unchanged active
+  slot. An interrupted transfer requires allowing the abandoned frame's
+  ten-second drain timeout to finish before issuing a new serial command.
+- Plain HTTP rejected. A verified HTTPS non-firmware file was rejected before
+  flash writing. An expired-certificate endpoint failed certificate
+  verification; the active slot remained unchanged.
+- Fault-injection application downloaded over HTTPS into app0, booted with
+  `trial=1`, then rejected itself on the 180-second deadline. The bootloader
+  returned to the previous app1 with `trial=0`.
+- A second HTTPS fault-image installation was reset through the USB bridge's
+  hardware reset line immediately after `trial=1`, before confirmation. The
+  bootloader returned to the previous app1 with `trial=0`, without waiting
+  for the application's rejection timer.
+
+The HTTPS test binaries were held in an **unpublished draft release**, not an
+official release. A host resolved the temporary asset redirect first; the
+ESP32 received only the final direct HTTPS URL, size and SHA-256 over USB,
+without a GitHub account token or on-device redirect handling.
+
+Host checks cover truncated/mismatched descriptors, wrong chip, malformed
+hashes, manifest integrity, partition geometry, actual linked rollback/TLS
+symbols and ACK timing using the real USB stream class with a controlled
+sender. Both ordinary and experimental build jobs pass in CI.
+
+Still to validate before a supported production release:
+
+1. Owner/operator visual confirmation of the expected panel contents.
+2. Deliberate failed image request preserving the previous panel content.
+3. Dedicated HTTP redirect, missing/wrong Content-Length, chunked response
+   and truncated HTTPS-body fixtures (the policy is implemented, but these
+   individual network fixtures have not all been exercised on hardware).
+4. Actual power removal during download and around activation. The timer
+   rejection test does not substitute for cutting power.
 
 Authenticated server offers, server/device status, official CI releases,
 submission authorization, owner UI and MCP tools are later milestones. Do not
