@@ -18,6 +18,8 @@ constexpr uint8_t ADC_ENABLE = 0x30;       // bit0 battery voltage ADC
 constexpr uint8_t VBAT_HIGH = 0x34;        // battery voltage, 14 bits, mV
 constexpr uint8_t VBAT_LOW = 0x35;
 constexpr uint8_t BATTERY_PERCENT = 0xA4;  // fuel gauge, 0-100
+constexpr uint8_t LDO_ENABLE = 0x90;       // bit2 ALDO3, the codec's rail (audio_hal.cpp)
+constexpr uint8_t ALDO3 = 0x04;
 
 bool readRegister(uint8_t reg, uint8_t &value) {
   Wire.beginTransmission(PMIC_ADDRESS);
@@ -44,6 +46,13 @@ bool setBits(uint8_t reg, uint8_t bits) {
 namespace PowerHAL {
 
 void begin() {
+  // ALDO3 as found at boot, before any sound switches it on (playTune,
+  // toneRing): after a cold power-up (battery and USB out), the AXP2101's
+  // own default. Whether that is on decides what leaving it on after a ring
+  // costs in deep sleep (fablamenas/wignet#56).
+  uint8_t ldo = 0;
+  if (readRegister(LDO_ENABLE, ldo))
+    Serial.printf("[Power] AXP2101 at boot: 90=%02X, ALDO3 (codec rail) %s\n", ldo, ldo & ALDO3 ? "on" : "off");
   // Only set the bits this needs: the rest of these registers belongs to
   // the charger and the other ADCs, configured elsewhere.
   if (!setBits(ADC_ENABLE, 0x01) || !setBits(GAUGE_CONTROL, 0x08))
@@ -86,7 +95,7 @@ String queryParams() {
 
 void describe(Print &out) {
   const uint8_t regs[] = {STATUS_1, STATUS_2, GAUGE_CONTROL, ADC_ENABLE,
-                          VBAT_HIGH, VBAT_LOW, BATTERY_PERCENT};
+                          VBAT_HIGH, VBAT_LOW, BATTERY_PERCENT, LDO_ENABLE};
   out.print("[bench] axp2101");
   for (uint8_t reg : regs) {
     uint8_t value = 0;
