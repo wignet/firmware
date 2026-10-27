@@ -360,9 +360,21 @@ press while it plays, which must not stop it:
 
 `power`, on every board, prints what `/schedule` would report and, on the
 PhotoPainter, the raw AXP2101 registers behind it:
-`[bench] axp2101 00=28 01=14 18=0A 30=03 34=10 35=45 A4=64`, then
+`[bench] axp2101 00=28 01=14 18=0A 30=03 34=10 35=45 A4=64 90=FF`, then
 `[bench] power valid=1 external=1 battery=100% 4165 mV charging=0 -> &pwr=ext&bat=100&mv=4165&chg=0`.
 A board that can't sense it answers `[bench] power: this board can't sense it`.
+
+`90` is the AXP2101's LDO enables; bit 2 is ALDO3, the codec's rail. The
+firmware also logs it at boot, before any sound
+(`[Power] AXP2101 at boot: 90=FF, ALDO3 (codec rail) on`). Read on the bedroom
+PhotoPainter on 2026-10-27 after a cold power-up (battery and USB out, so
+the PMIC lost its registers): `90=FF`, every LDO on, ALDO3 included. So
+leaving ALDO3 on after a ring (`stopAudio()`, since 2026-09-26) is the
+board's own default and costs nothing in deep sleep; switching it off was
+below the default, and took the shared I2C bus down with the codec.
+Checked the same day: 20 play/stop cycles with `i2c` after each kept the
+bus healthy, and after them an `alarm in 90` + `sleep rtc` woke on the RTC
+interrupt at the alarm's second (fablamenas/wignet#56).
 
 If you extend it: replies start with `[bench] `, and the first line of `help`
 names the formats the frame draws (`commands (images: bmp wgn6):`), which is
