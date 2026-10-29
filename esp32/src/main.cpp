@@ -21,6 +21,14 @@
 
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6) || defined(WIGNET_BATTERY_ADC_PIN)
 #include "power_hal.h"
+#if defined(WIGNET_OTA_CLIENT)
+#include "ota_client.h"
+#endif
+#if defined(WIGNET_OTA_CLIENT)
+// The OTA checks run on the loop task: an ECDSA verification and a TLS
+// download on top of fetchSchedule() overflow the default 8 KB stack.
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+#endif
 #endif
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
 #include <esp_heap_caps.h>
@@ -615,6 +623,10 @@ int fetchSchedule() {
   // spectra6: draws WGN6 six-colour frames; this is what switches the
   // device to colour on the server (docs/wgn6.md).
   url += "&caps=v1%3Awake_alarm%2Caudio_out%2Ctune_mml1%2Cpower_report1%2Csound_list1%2Cspectra6";
+#if defined(WIGNET_OTA_CAPABLE)
+  // ota1: this board installs firmware offered on /schedule (docs/ota.md).
+  url += "%2Cota1";
+#endif
   url += PowerHAL::queryParams();
 #elif defined(WIGNET_DISPLAY_RGB)
   // The colour LCD boards (docs/lcd_154.md, docs/lcd_2.md), from features:
@@ -699,6 +711,10 @@ int fetchSchedule() {
   url += "&fw=" WIGNET_FW_VERSION;
   // The board this build is for, so the platform can tell boards apart.
   url += "&hw=" WIGNET_HW_TARGET;
+#if defined(WIGNET_OTA_CAPABLE)
+  // on=, and oh=/ota=/oc= while an update is pending or reported (ota_client.cpp).
+  url += OtaClient::pollQuery();
+#endif
 
   Serial.println("[Schedule] Fetching: " + url);
 
@@ -729,6 +745,9 @@ int fetchSchedule() {
     ScenePlayer::onSchedule(payload);
 #endif
 
+#if defined(WIGNET_OTA_CLIENT)
+    OtaClient::onSchedule(payload); // otaOffer / otaConfirm, within 60 s of the poll
+#endif
     applyWifiForget(payload); // networks the owner asked this Wignet to forget
 #if defined(WIGNET_DISPLAY_RGB)
     lcdApplyWelcome(payload);
@@ -2015,6 +2034,10 @@ void setup() {
   // On battery the board stays on only once the firmware holds it: before
   // anything else, while PWR may still be held down (power_hold_hal.cpp).
   PowerHoldHAL::begin();
+#if defined(WIGNET_OTA_CLIENT)
+  // The OTA deadline starts here, before Wi-Fi (docs/ota.md "Confirmation").
+  OtaClient::begin();
+#endif
   // Record boot time for deep sleep safety period
   bootTime = millis();
 
@@ -2190,6 +2213,9 @@ static unsigned long wifiLastSwitchTryMs = 0;
 void loop() {
   if (WiFi.status() == WL_CONNECTED) wifiLostSinceMs = 0;
   UsbConsole::poll(); // bench commands over USB (play_mml.py, show_image.py)
+#if defined(WIGNET_OTA_CLIENT)
+  OtaClient::tick(); // the 10-minute deadline of a pending image
+#endif
 #if defined(WIGNET_ORIENTATION_REPORT)
   if (lcdTurnToReport) {
     lcdTurnToReport = false;
@@ -2297,6 +2323,10 @@ void loop() {
     // Just turned: the new layout takes a second or two to render.
     if (lcdRelayoutPending) pollIntervalMs = LCD_RELAYOUT_POLL_MS;
 #endif
+#if defined(WIGNET_OTA_CLIENT)
+    // A pending image polls every 30 s and never sleeps (docs/ota.md).
+    if (OtaClient::pending()) pollIntervalMs = 30000UL;
+#endif
     bool held = false;
 #if defined(WIGNET_BENCH_CONSOLE)
     held = benchHolding();
@@ -2317,6 +2347,9 @@ void loop() {
       else nextWakeupSec = DEFAULT_REFRESH_SEC;
 #else
       if (fetchSuccess) nextWakeupSec = fetchSchedule();
+#endif
+#if defined(WIGNET_OTA_CLIENT)
+      if (OtaClient::pending() && nextWakeupSec > 30) nextWakeupSec = 30;
 #endif
 
       if (fetchSuccess) {

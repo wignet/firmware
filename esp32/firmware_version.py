@@ -87,6 +87,10 @@ write_header(VERSION)
 print(f"Firmware version: {VERSION}")
 
 # The build target, sent on /schedule as `&hw=` (backoffice/power.py) so the
-# platform can tell boards apart. It is the PlatformIO environment's name.
-if env is not None:
-    env.Append(CPPDEFINES=[("WIGNET_HW_TARGET", env.StringifyMacro(env["PIOENV"]))])  # noqa: F821
+# platform can tell boards apart. It is the PlatformIO environment's name,
+# unless an environment fixes its board id itself (docs/ota.md "Board ids":
+# the ota1 environment is the photopainter board, not a board of its own).
+if env is not None:  # noqa: F821
+    defined = [d[0] if isinstance(d, (tuple, list)) else d for d in env.get("CPPDEFINES", [])]  # noqa: F821
+    if "WIGNET_HW_TARGET" not in defined:
+        env.Append(CPPDEFINES=[("WIGNET_HW_TARGET", env.StringifyMacro(env["PIOENV"]))])  # noqa: F821

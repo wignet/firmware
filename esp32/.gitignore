@@ -18,3 +18,6 @@ src/firmware_version_gen.h
 
 # Local full-flash safety copies (device-specific and large)
 backups/
+
+# The OTA bench: test key, CA and certificates (ota_bench_server.py init)
+bench/
