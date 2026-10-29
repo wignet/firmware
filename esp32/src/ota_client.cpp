@@ -54,7 +54,6 @@ enum Reason : uint8_t {
   kSize,
   kWrite,
   kPower,
-  kDeferred, // no CA certificate configured: the download waits
 };
 
 const char *reasonName(uint8_t reason) {
@@ -453,12 +452,6 @@ void install(const Offer &of) {
   }
 
   Reason reason = downloadInto(of.url, of.size, expected, next);
-  if (reason == kDeferred) {
-    Serial.println("[OTA] Download deferred: no CA certificate configured");
-    rec.phase = kIdle;
-    saveRecord();
-    return;
-  }
   if (reason != kNoReason) {
     Serial.printf("[OTA] Installation failed: %s\n", reasonName(reason));
     recordFailure(static_cast<Reason>(reason));
