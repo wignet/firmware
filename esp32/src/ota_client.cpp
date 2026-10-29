@@ -618,6 +618,12 @@ void begin() {
       saveRecord();
     }
     Serial.println("[OTA] Running a new image; awaiting the server's confirmation");
+#if defined(WIGNET_OTA_BENCH_CRASH_PENDING)
+    // Bench: a new image that crashes while pending, before its first poll
+    // can bring a confirmation.
+    Serial.println("[OTA] BENCH: crashing while pending");
+    abort();
+#endif
   } else if (running && rec.phase == kSelected && running->subtype == rec.prev) {
     // Selected, yet the previous slot runs: the bootloader rolled back.
     rec.phase = kRolledBack;
@@ -631,13 +637,6 @@ void begin() {
 }
 
 void tick() {
-#if defined(WIGNET_OTA_BENCH_CRASH_PENDING)
-  // Bench: a new image that crashes 20 s after boot, before any confirmation.
-  if (pendingFlag && esp_timer_get_time() > 20LL * 1000000LL) {
-    Serial.println("[OTA] BENCH: crashing while pending");
-    abort();
-  }
-#endif
   if (pendingFlag && esp_timer_get_time() >= static_cast<int64_t>(deadlineUs)) rejectPending();
 }
 

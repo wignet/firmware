@@ -88,12 +88,17 @@ installs:
 
 | `OTA_BENCH_FAULT` | Built into | Expected |
 | --- | --- | --- |
-| `crash_pending` | the offered image | it aborts 20 s after boot; the bootloader returns to the previous one: `ota=rolledback:<id>` |
+| `crash_pending` | the offered image | it aborts as soon as it boots pending, before its first poll; the bootloader returns to the previous one: `ota=rolledback:<id>` |
 | `reset_before_select` | the running image | reset after the attempt record, before the slot is selected: the old image boots, the attempt counts as interrupted, nothing is reported |
 | `reset_after_select` | the running image | reset after the slot is selected, before the record says so: the new image boots pending and is confirmed as usual |
 
 The unsafe-power case runs against production: on battery, the board
 reports `ota=failed:<id>:power` (passed on Kouleur, 2026-10-29).
+
+All the cases above passed on Kouleur on 2026-10-29, counters 2 to 23. The
+first run of `stale_nonce` did not: the board checked the offer's signature
+against the offer's own `nonce` field, so an offer from an earlier poll was
+accepted. It now checks against the nonce its poll sent.
 
 Still missing from the firmware: a watchdog that recovers a pending image
 whose startup hangs. Its case will join this list with it.

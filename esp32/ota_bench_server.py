@@ -227,7 +227,9 @@ class Bench:
         with self.lock:
             print(f"{now():%H:%M:%S} poll fw={q.get('fw')} hw={q.get('hw')} on={nonce[:8]} "
                   f"ota={report or '-'} oc={oc or '-'} oh={oh[:16] or '-'}", flush=True)
-            mine = oc == str(self.counter)
+            # wrong_counter reuses the last run's counter: that run's report is
+            # not this one's.
+            mine = oc == str(self.counter) and self.fault != "wrong_counter"
             if mine and report.split(":")[0] in ("confirmed", "failed", "rolledback"):
                 if self.done != report:
                     self.done = report
@@ -285,7 +287,12 @@ def handler(bench, tls):
                 self.send_header("Content-Length", str(len(bench.image)))
                 self.end_headers()
                 body = bench.image[: len(bench.image) // 2] if bench.fault == "truncated" else bench.image
-                self.wfile.write(body)
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    # The board hangs up as soon as it sees a wrong size.
+                    print("  the board closed the download", flush=True)
+                    return
                 if bench.fault == "truncated":
                     self.close_connection = True
             else:
