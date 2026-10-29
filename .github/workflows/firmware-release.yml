@@ -16,7 +16,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [waveshare_driver_75v2, waveshare_photopainter_73e6]
+        # `ota: true` is the list of OTA boards: the release also carries
+        # wignet-<environment>-app.bin, which the server imports and offers
+        # over the air once the release is published. A board joins it only
+        # after its bench (docs/ota_bench.md) and with ota1 declared.
+        include:
+          - environment: waveshare_driver_75v2
+          - environment: waveshare_photopainter_73e6
+            ota: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,6 +35,7 @@ jobs:
         working-directory: esp32
         env:
           FIRMWARE_ENVIRONMENT: ${{ matrix.environment }}
+          WIGNET_RELEASE_APP: ${{ matrix.ota && '1' || '' }}
         run: |
           cp src/config.h.example src/config.h
           pio run -e "$FIRMWARE_ENVIRONMENT" -t release
