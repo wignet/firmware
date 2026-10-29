@@ -412,6 +412,8 @@ bool readOffer(JsonObjectConst o, Offer &of) {
 }
 
 // The canonical lines an offer is signed over (docs/ota.md, "The offer").
+// The nonce is the one this poll sent, never the offer's own field: an offer
+// signed for another poll fails its signature.
 String offerCanonical(const Offer &of) {
   char num[24];
   String s = "wignet-ota1\n";
@@ -430,7 +432,7 @@ String offerCanonical(const Offer &of) {
   snprintf(num, sizeof(num), "%lld", static_cast<long long>(of.expires));
   s += num;
   s += "\n";
-  s += of.nonce;
+  s += pollNonce;
   s += "\n";
   s += of.powerSource;
   s += "\n";
