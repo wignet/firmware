@@ -1,13 +1,20 @@
 # Install the ready-to-flash firmware
 
-The first downloadable image supports **Waveshare e-Paper ESP32 Driver Board
-+ 7.5-inch V2 black-and-white panel (800 × 480)**. It is not for a FireBeetle,
-an ESP8266, a PhotoPainter or an ESP32-S3 LCD.
+Download the image for your board (both screens are 800 × 480):
 
-Get the image and `SHA256SUMS` from the
+| Board and panel | File | esptool chip |
+| --- | --- | --- |
+| Waveshare ESP32 Driver Board + 7.5-inch V2 black-and-white | `wignet-waveshare_driver_75v2-factory.bin` | `esp32` |
+| Waveshare ESP32-S3 PhotoPainter Rev2.0 + 7.3-inch Spectra 6 | `wignet-waveshare_photopainter_73e6-factory.bin` | `esp32s3` |
+
+These images are not for a FireBeetle, an ESP8266 or an ESP32-S3 LCD.
+
+Get the image and its matching `wignet-<environment>-SHA256SUMS` from the
 [latest release](https://github.com/wignet/firmware/releases/latest).
-`wignet-waveshare_driver_75v2-factory.bin` contains the bootloader, partition
-table and application. Flash the whole file at **0x0**. The application-only
+Each image contains the bootloader, partition table and application. The
+PhotoPainter image also initializes an empty LittleFS partition for sounds
+and tunes; it includes no sounds or settings from a configured frame.
+Flash the whole file at **0x0**. The application-only
 `firmware.bin` from a PlatformIO build is not a first-install image.
 
 ## Flash over USB
@@ -18,10 +25,13 @@ Use a USB data cable. Install Python and esptool:
 python -m pip install esptool==4.11.0
 ```
 
-Check the downloaded file's checksum (`sha256sum -c SHA256SUMS` on Linux,
-`shasum -a 256 -c SHA256SUMS` on macOS). On Windows, compare
+Check the downloaded file's checksum (`sha256sum -c wignet-<environment>-SHA256SUMS`
+on Linux, `shasum -a 256 -c wignet-<environment>-SHA256SUMS` on macOS).
+Replace `<environment>` with your board's target name, such as
+`waveshare_photopainter_73e6`. On Windows, compare
 `Get-FileHash .\wignet-waveshare_driver_75v2-factory.bin -Algorithm SHA256`
-with the value in `SHA256SUMS`.
+with the value in the matching checksum file (use the PhotoPainter filename
+for that board). The release also includes `SHA256SUMS` covering both images.
 
 Replace `PORT` with the board's port, such as `/dev/ttyACM0`,
 `/dev/cu.usbserial-…` or `COM3`:
@@ -30,9 +40,16 @@ Replace `PORT` with the board's port, such as `/dev/ttyACM0`,
 python -m esptool --chip esp32 --port PORT --baud 115200 write_flash 0x0 wignet-waveshare_driver_75v2-factory.bin
 ```
 
+For the **PhotoPainter Spectra 6**:
+
+```sh
+python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0 wignet-waveshare_photopainter_73e6-factory.bin
+```
+
 This **first-install image resets stored Wi-Fi and local settings**: the
 merged file fills the space between the boot images with erased bytes. It
-keeps the board's hardware identity and its Wignet owner page. For an update
+keeps the board's hardware identity and its Wignet owner page. On the
+PhotoPainter, it also clears locally cached sounds and tunes. For an update
 that preserves Wi-Fi, build from source and use PlatformIO upload instead.
 The image is built from source, never from a backup of a configured device;
 it contains no Wi-Fi credentials or device identifier.
@@ -54,6 +71,10 @@ If connecting fails, hold BOOT, tap RESET, release BOOT when flashing starts.
    next syncs; e-paper refresh takes several seconds. Later, connect your AI
    agent from the owner's settings.
 
+On the PhotoPainter, a colour refresh takes roughly 30 seconds. It reports
+its Spectra 6 profile and power itself. On USB it stays awake at the cadence
+chosen on the owner page; the battery cadence applies when unplugged.
+
 ## Build and publish downloads
 
 On a clean checkout, copy `esp32/src/config.h.example` to `config.h`, then:
@@ -61,10 +82,12 @@ On a clean checkout, copy `esp32/src/config.h.example` to `config.h`, then:
 ```sh
 cd esp32
 pio run -e waveshare_driver_75v2 -t release
+pio run -e waveshare_photopainter_73e6 -t release
 ```
 
-The image, a checksum, a source-commit record (`BUILD.json`) and a manifest
-are generated under `esp32/.pio/release/`. The release target refuses a local
+The image, checksum, source-commit record (`wignet-<environment>-BUILD.json`)
+and installer manifest (`wignet-<environment>-manifest.json`) are generated
+under `esp32/.pio/release/<environment>/`. The release target refuses a local
 configuration or uncommitted firmware inputs. It uses PlatformIO's flash
 offsets and esptool's `merge_bin`.
 
