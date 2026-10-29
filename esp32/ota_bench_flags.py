@@ -4,7 +4,7 @@
 #
 #   OTA_BENCH_TAG=b pio run -e waveshare_photopainter_73e6_ota1_bench
 #       a second image of the same commit (a different hash)
-#   OTA_BENCH_FAULT=crash_pending | reset_before_select | reset_after_select
+#   OTA_BENCH_FAULT=crash_pending | hang_pending | reset_before_select | reset_after_select
 #       an image that fails on purpose, for the rollback cases
 import json
 import os
@@ -14,6 +14,7 @@ Import("env")  # noqa: F821
 
 FAULTS = {
     "crash_pending": "WIGNET_OTA_BENCH_CRASH_PENDING",
+    "hang_pending": "WIGNET_OTA_BENCH_HANG_PENDING",
     "reset_before_select": "WIGNET_OTA_BENCH_RESET_BEFORE_SELECT",
     "reset_after_select": "WIGNET_OTA_BENCH_RESET_AFTER_SELECT",
 }

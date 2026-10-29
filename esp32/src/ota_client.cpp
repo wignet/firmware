@@ -35,6 +35,7 @@ namespace {
 
 constexpr uint64_t kResponseLimitUs = 60ULL * 1000000ULL;
 constexpr uint64_t kDeadlineUs = 600ULL * 1000000ULL;
+constexpr uint64_t kWatchdogGraceUs = 30ULL * 1000000ULL; // tick() rejects first
 constexpr uint8_t kReportPolls = 20;
 #ifndef WIGNET_OTA_URL_PREFIX
 #define WIGNET_OTA_URL_PREFIX "https://api.wignet.app/firmware/"
@@ -66,6 +67,7 @@ enum Reason : uint8_t {
   kSize,
   kWrite,
   kPower,
+  kChip, // stored in NVS: append, never renumber
 };
 
 const char *reasonName(uint8_t reason) {
@@ -75,6 +77,7 @@ const char *reasonName(uint8_t reason) {
     case kSize: return "size";
     case kWrite: return "write";
     case kPower: return "power";
+    case kChip: return "chip";
     default: return "download";
   }
 }
@@ -97,6 +100,7 @@ struct Record {
 Record rec;
 bool pendingFlag = false;
 uint64_t deadlineUs = 0;
+esp_timer_handle_t watchdog = nullptr;
 bool runningHashReady = false;
 uint8_t runningHash[32];
 uint32_t runningLength = 0;
@@ -363,17 +367,21 @@ Reason downloadInto(const char *url, uint32_t size, const uint8_t *expectedHash,
     esp_ota_abort(handle);
     return reason;
   }
-  if (esp_ota_end(handle) != ESP_OK) return kWrite;
-
-  // The image must be for this chip, as the running one is.
+  // The image must be for this chip, as the running one is. Checked before
+  // esp_ota_end(), whose own validation would report a wrong chip as `write`.
   esp_image_header_t mine, theirs;
-  if (esp_partition_read(slot, 0, &theirs, sizeof(theirs)) != ESP_OK ||
-      theirs.magic != ESP_IMAGE_HEADER_MAGIC)
-    return kWrite;
   const esp_partition_t *running = esp_ota_get_running_partition();
-  if (esp_partition_read(running, 0, &mine, sizeof(mine)) != ESP_OK ||
-      mine.chip_id != theirs.chip_id)
+  if (esp_partition_read(slot, 0, &theirs, sizeof(theirs)) != ESP_OK ||
+      theirs.magic != ESP_IMAGE_HEADER_MAGIC ||
+      esp_partition_read(running, 0, &mine, sizeof(mine)) != ESP_OK) {
+    esp_ota_abort(handle);
     return kWrite;
+  }
+  if (mine.chip_id != theirs.chip_id) {
+    esp_ota_abort(handle);
+    return kChip;
+  }
+  if (esp_ota_end(handle) != ESP_OK) return kWrite;
   return kNoReason;
 }
 
@@ -566,11 +574,33 @@ void handleConfirm(JsonObjectConst c) {
     return;
   }
   pendingFlag = false;
+  if (watchdog) esp_timer_stop(watchdog);
   rec.phase = kConfirmed;
   rec.reason = kNoReason;
   rec.reportsLeft = kReportPolls;
   if (!saveRecord()) Serial.println("[OTA] Could not persist the confirmation");
   Serial.println("[OTA] Image confirmed by the server");
+}
+
+// The watchdog of a pending image (docs/ota.md: "a watchdog must also recover
+// a hung startup"). tick() rejects the image at the deadline, but only while
+// the loop runs; this timer runs on its own task and restarts the board a
+// little later. The bootloader then finds the image still pending and boots
+// the previous one, and begin() there reports the rollback. A hang that
+// starves this task too is left to the interrupt and task watchdogs.
+void watchdogFired(void *) {
+  Serial.println("[OTA] Watchdog: still pending past the deadline; restarting");
+  esp_restart();
+}
+
+void armWatchdog() {
+  const esp_timer_create_args_t args = {
+      .callback = watchdogFired, .arg = nullptr, .dispatch_method = ESP_TIMER_TASK,
+      .name = "ota_watchdog", .skip_unhandled_events = true};
+  if (esp_timer_create(&args, &watchdog) != ESP_OK ||
+      esp_timer_start_once(watchdog, kDeadlineUs + kWatchdogGraceUs) != ESP_OK) {
+    Serial.println("[OTA] Could not arm the watchdog");
+  }
 }
 
 // Reject the pending image: it goes back to the previous slot.
@@ -611,6 +641,7 @@ void begin() {
   if (running && state == ESP_OTA_IMG_PENDING_VERIFY) {
     deadlineUs = esp_timer_get_time() + kDeadlineUs;
     pendingFlag = true;
+    armWatchdog();
     if (computeRunningImage(running)) runningHashReady = true;
     if ((rec.phase == kInstalling || rec.phase == kSelected) &&
         running->subtype == rec.target && rec.phase != kSelected) {
@@ -623,6 +654,12 @@ void begin() {
     // can bring a confirmation.
     Serial.println("[OTA] BENCH: crashing while pending");
     abort();
+#endif
+#if defined(WIGNET_OTA_BENCH_HANG_PENDING)
+    // Bench: a new image whose startup never returns; only the watchdog
+    // can bring the previous image back.
+    Serial.println("[OTA] BENCH: hanging while pending");
+    for (;;) delay(1000);
 #endif
   } else if (running && rec.phase == kSelected && running->subtype == rec.prev) {
     // Selected, yet the previous slot runs: the bootloader rolled back.
