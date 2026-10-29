@@ -2,6 +2,10 @@
 
 Offsets and boot images come from PlatformIO, exactly as for USB upload.
 Only build outputs are packaged; never read back a device's flash or NVS.
+
+With WIGNET_RELEASE_APP=1 (the workflow's list of OTA boards), also the
+application alone, `wignet-<environment>-app.bin`, which the server imports
+from a published release and installs over the air (docs/ota.md, wignet).
 """
 import hashlib
 import json
@@ -77,7 +81,17 @@ def package_release(source, target, env):
         command.extend([str(offset), env.subst(str(path))])
     subprocess.run(command, check=True)
     digest = hashlib.sha256(image.read_bytes()).hexdigest()
-    (output / f"{prefix}-SHA256SUMS").write_text(f"{digest}  {name}\n")
+    sums = f"{digest}  {name}\n"
+    if os.environ.get("WIGNET_RELEASE_APP") == "1":
+        app = Path(env.subst("$BUILD_DIR/${PROGNAME}.bin")).read_bytes()
+        # The server installs only an image that declares ota1 itself, found
+        # by this literal: one that did not would strand its board.
+        if b"%2Cota1" not in app:
+            raise RuntimeError("An over-the-air image must declare ota1 (WIGNET_OTA_CAPABLE)")
+        app_name = f"{prefix}-app.bin"
+        (output / app_name).write_bytes(app)
+        sums += f"{hashlib.sha256(app).hexdigest()}  {app_name}\n"
+    (output / f"{prefix}-SHA256SUMS").write_text(sums)
     manifest = {
         "name": f"Wignet · {title}",
         "version": version[:12],

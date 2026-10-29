@@ -15,9 +15,9 @@ A bench build talks to it with a test key and its own CA.
   bench CA and the server's certificate, an untrusted CA for `bad_tls`,
   `ota_bench.h` for the firmware and `bench.json` (addresses, last counter).
 - `[env:waveshare_photopainter_73e6_ota1_bench]` (`esp32/platformio.ini`): the
-  ota1 build, plus `ota_bench_flags.py`, which reads `bench/`.
+  PhotoPainter build, plus `ota_bench_flags.py`, which reads `bench/`.
 
-The bench build differs from the ota1 build in four ways, all from
+The bench build differs from the PhotoPainter build in four ways, all from
 `ota_bench.h` and `ota_bench_flags.py`:
 
 - it trusts the bench's test key, not the production key;
@@ -31,7 +31,8 @@ The bench build differs from the ota1 build in four ways, all from
 It says so at boot: `[OTA] BENCH BUILD …; never outside the bench`. It cannot
 install anything the production server offers (unknown key), and the bench
 server cannot offer anything to a production build (unknown key, URL outside
-`api.wignet.app`). After the bench, flash the ota1 build back over USB.
+`api.wignet.app`). After the bench, flash the PhotoPainter build
+(`waveshare_photopainter_73e6`) back over USB.
 
 ## Running it
 

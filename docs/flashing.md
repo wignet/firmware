@@ -31,7 +31,11 @@ Replace `<environment>` with your board's target name, such as
 `waveshare_photopainter_73e6`. On Windows, compare
 `Get-FileHash .\wignet-waveshare_driver_75v2-factory.bin -Algorithm SHA256`
 with the value in the matching checksum file (use the PhotoPainter filename
-for that board). The release also includes `SHA256SUMS` covering both images.
+for that board). The release also includes `SHA256SUMS` covering every image.
+
+`wignet-waveshare_photopainter_73e6-app.bin` is the application alone: the
+Wignet server installs it over the air on a PhotoPainter that already runs
+this firmware. Never flash it at 0x0.
 
 Replace `PORT` with the board's port, such as `/dev/ttyACM0`,
 `/dev/cu.usbserial-…` or `COM3`:
