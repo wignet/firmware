@@ -21,6 +21,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "ota_ca.h"
 #include "ota_keys.h"
 #include "power_hal.h"
 
@@ -292,9 +293,8 @@ void recordFailure(Reason reason) {
 // reason on failure, kNoReason on success (the slot is then ready to select).
 Reason downloadInto(const char *url, uint32_t size, const uint8_t *expectedHash,
                     const esp_partition_t *slot) {
-#if defined(WIGNET_OTA_CA_PEM)
   WiFiClientSecure secure;
-  secure.setCACert(WIGNET_OTA_CA_PEM);
+  secure.setCACert(kOtaCaPem);
   secure.setTimeout(15);
   HTTPClient http;
   http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
@@ -364,15 +364,6 @@ Reason downloadInto(const char *url, uint32_t size, const uint8_t *expectedHash,
       mine.chip_id != theirs.chip_id)
     return kWrite;
   return kNoReason;
-#else
-  // No CA certificate is configured: the certificate cannot be validated,
-  // so the download waits (docs/ota.md, "Freshness without trusting the clock").
-  (void)url;
-  (void)size;
-  (void)expectedHash;
-  (void)slot;
-  return kDeferred;
-#endif
 }
 
 struct Offer {
@@ -487,23 +478,33 @@ void install(const Offer &of) {
   esp_restart();
 }
 
+#define REFUSE(why)                              \
+  do {                                           \
+    Serial.printf("[OTA] Offer refused: %s\n", why); \
+    return;                                      \
+  } while (0)
+
 void handleOffer(JsonObjectConst o) {
   Offer of;
-  if (!readOffer(o, of)) return;
+  if (!readOffer(o, of)) REFUSE("unreadable fields");
+  Serial.printf("[OTA] Offer %s seen: counter %llu, hw %s, expires %lld, clock %ld, last counter %llu\n",
+                of.id, static_cast<unsigned long long>(of.counter), of.hw,
+                static_cast<long long>(of.expires), static_cast<long>(time(nullptr)),
+                static_cast<unsigned long long>(rec.counter));
 
   // Silent refusals: the offer is not for this board, or it is not signed.
-  KeyEntry *key = findKey(of.key);
-  if (!key) return;
-  if (strcmp(of.hw, WIGNET_HW_TARGET) != 0) return;
-  if (strncmp(of.url, kUrlPrefix, strlen(kUrlPrefix)) != 0) return;
-  if (!verifySignature(of.key, offerCanonical(of), of.sig)) return;
-  if (of.counter == 0 || of.counter > kMaxCounter || of.counter <= rec.counter) return;
-  if (of.size == 0) return;
+  if (!findKey(of.key)) REFUSE("unknown key");
+  if (strcmp(of.hw, WIGNET_HW_TARGET) != 0) REFUSE("hw is not this board");
+  if (strncmp(of.url, kUrlPrefix, strlen(kUrlPrefix)) != 0) REFUSE("url outside /firmware/");
+  if (!verifySignature(of.key, offerCanonical(of), of.sig)) REFUSE("signature");
+  if (of.counter == 0 || of.counter > kMaxCounter) REFUSE("counter out of range");
+  if (of.counter <= rec.counter) REFUSE("counter not above the last attempt");
+  if (of.size == 0) REFUSE("size zero");
   // Only a plausible clock can judge `expires`; NTP is not the replay defence.
-  if (time(nullptr) > kPlausibleTime && time(nullptr) >= of.expires) return;
-  if (strlen(of.id) != 16 || strncmp(of.id, of.sha, 16) != 0) return;
+  if (time(nullptr) > kPlausibleTime && time(nullptr) >= of.expires) REFUSE("expired");
+  if (strlen(of.id) != 16 || strncmp(of.id, of.sha, 16) != 0) REFUSE("id is not the hash");
   const esp_partition_t *next = esp_ota_get_next_update_partition(nullptr);
-  if (!next || of.size > next->size) return;
+  if (!next || of.size > next->size) REFUSE("size exceeds the slot");
 
   Serial.printf("[OTA] Offer %s accepted (counter %llu)\n", of.id,
                 static_cast<unsigned long long>(of.counter));
