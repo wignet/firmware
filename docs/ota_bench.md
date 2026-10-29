@@ -82,23 +82,32 @@ One fault per run (`--fault`); what the board must do:
 | `replayed_confirm` | confirmation refused, then rollback: `ota=rolledback:<id>` |
 
 Faults built into an image instead (`OTA_BENCH_FAULT` when building it, then
-`--fault none`). `crash_pending` goes in the image the server offers; the two
+`--fault none`). `crash_pending` and `hang_pending` go in the image the server offers; the two
 resets go in the image the board runs, since it is the running image that
 installs:
 
 | `OTA_BENCH_FAULT` | Built into | Expected |
 | --- | --- | --- |
 | `crash_pending` | the offered image | it aborts as soon as it boots pending, before its first poll; the bootloader returns to the previous one: `ota=rolledback:<id>` |
+| `hang_pending` | the offered image | its startup never returns, so the loop never checks the deadline; the watchdog restarts the board 30 s after it, and the bootloader returns to the previous image: `ota=rolledback:<id>` |
 | `reset_before_select` | the running image | reset after the attempt record, before the slot is selected: the old image boots, the attempt counts as interrupted, nothing is reported |
 | `reset_after_select` | the running image | reset after the slot is selected, before the record says so: the new image boots pending and is confirmed as usual |
 
 The unsafe-power case runs against production: on battery, the board
 reports `ota=failed:<id>:power` (passed on Kouleur, 2026-10-29).
 
-All the cases above passed on Kouleur on 2026-10-29, counters 2 to 23. The
-first run of `stale_nonce` did not: the board checked the offer's signature
-against the offer's own `nonce` field, so an offer from an earlier poll was
-accepted. It now checks against the nonce its poll sent.
+An image for another chip needs no fault: offer the 7.5 V2 build (an ESP32,
+not an ESP32-S3) with `--fault none`. Its hash and size are right; the board
+reports `ota=failed:<id>:chip` and keeps its image.
 
-Still missing from the firmware: a watchdog that recovers a pending image
-whose startup hangs. Its case will join this list with it.
+```sh
+pio run -e waveshare_driver_75v2
+python ota_bench_server.py serve --image .pio/build/waveshare_driver_75v2/firmware.bin --fault none
+```
+
+All the cases above passed on Kouleur on 2026-10-29: counters 2 to 23, then
+24 (wrong chip) and 25 (`hang_pending`: the board restarted 10 min 30 s after
+booting the image, and the previous one reported `rolledback`). The first run of `stale_nonce` did not: the
+board checked the offer's signature against the offer's own `nonce` field, so
+an offer from an earlier poll was accepted. It now checks against the nonce
+its poll sent.
