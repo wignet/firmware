@@ -24,6 +24,11 @@
 #if defined(WIGNET_OTA_CLIENT)
 #include "ota_client.h"
 #endif
+#if defined(WIGNET_OTA_CLIENT)
+// The OTA checks run on the loop task: an ECDSA verification and a TLS
+// download on top of fetchSchedule() overflow the default 8 KB stack.
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+#endif
 #endif
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
 #include <esp_heap_caps.h>

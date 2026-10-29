@@ -226,7 +226,7 @@ bool computeRunningImage(const esp_partition_t *part) {
   mbedtls_sha256_context ctx;
   mbedtls_sha256_init(&ctx);
   mbedtls_sha256_starts(&ctx, 0);
-  uint8_t buf[kChunk];
+  static uint8_t buf[kChunk];
   for (uint32_t off = 0; off < end;) {
     size_t n = min<uint32_t>(sizeof(buf), end - off);
     if (esp_partition_read(part, off, buf, n) != ESP_OK) {
@@ -318,7 +318,7 @@ Reason downloadInto(const char *url, uint32_t size, const uint8_t *expectedHash,
   mbedtls_sha256_context ctx;
   mbedtls_sha256_init(&ctx);
   mbedtls_sha256_starts(&ctx, 0);
-  uint8_t buf[kChunk];
+  static uint8_t buf[kChunk];
   uint32_t got = 0;
   uint32_t lastDataMs = millis();
   Reason reason = kNoReason;
@@ -485,7 +485,8 @@ void install(const Offer &of) {
   } while (0)
 
 void handleOffer(JsonObjectConst o) {
-  Offer of;
+  static Offer of; // about 700 bytes: off the loop task's stack
+
   if (!readOffer(o, of)) REFUSE("unreadable fields");
   Serial.printf("[OTA] Offer %s seen: counter %llu, hw %s, expires %lld, clock %ld, last counter %llu\n",
                 of.id, static_cast<unsigned long long>(of.counter), of.hw,
@@ -675,9 +676,12 @@ void onSchedule(const String &payload) {
   }
   if (pendingFlag) {
     if (doc["otaConfirm"].is<JsonObjectConst>()) handleConfirm(doc["otaConfirm"].as<JsonObjectConst>());
-    return;
+  } else if (doc["otaOffer"].is<JsonObjectConst>()) {
+    handleOffer(doc["otaOffer"].as<JsonObjectConst>());
   }
-  if (doc["otaOffer"].is<JsonObjectConst>()) handleOffer(doc["otaOffer"].as<JsonObjectConst>());
+  // The least free stack the loop task has had: what the checks leave.
+  Serial.printf("[OTA] Loop stack left at worst: %u bytes\n",
+                static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
 }
 
 } // namespace OtaClient
