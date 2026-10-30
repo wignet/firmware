@@ -115,8 +115,8 @@ its poll sent.
 
 ## The 7.5 V2 (wignet/firmware#14)
 
-The Waveshare ESP32 Driver Board + 7.5" V2 passes the same gate before its
-production build declares `ota1`. Its bench build is
+The Waveshare ESP32 Driver Board + 7.5" V2 passed the same gate before its
+production build declared `ota1`. Its bench build is
 `[env:waveshare_driver_75v2_ota1_bench]`; the bench server signs for the
 `hw=` the board sends, so `bench/` and the commands above serve it as they
 are, with that environment name. Flash the bench build with `-t upload`, not
@@ -128,9 +128,11 @@ What differs from the PhotoPainter:
 - **Wrong chip**: offer the PhotoPainter build (an ESP32-S3 image, 1.26 MB,
   which fits the 1.75 MiB slot): `ota=failed:<id>:chip`.
 - **Power**: the board cannot measure its power (`PowerHAL::available()` is
-  false), so the signed `powerSource` decides. Against production, on
-  battery and with the frame's power left `unknown` on its page, it must
-  report `ota=failed:<id>:power`.
+  false), plugged in or on a removable battery alike. The signed
+  `powerSource` decides: it installs only when the owner has stated it
+  plugged in (`set_power_source`) or forced the update (`powerOverride`).
+  The server offers nothing otherwise (wignet `docs/ota.md`, "Power rule"),
+  so there is no unplugged case to run as on the PhotoPainter.
 - **Memory**: no PSRAM. Note the `[OTA] Loop stack left at worst` line and,
   during the `none` run, that the download completes after the TLS handshake
   (#7 measured 121,880 bytes free and a 73,716-byte largest block after TLS).
@@ -151,4 +153,4 @@ old layout with its three saved networks kept. Two fixes came out of it.
 SNTP, so the OTA client now does. And `OtaClient::begin()` ran before
 `Serial.begin()`, which loses what it says at boot on a UART console; it now
 runs just after. The loop stack kept at least 9,340 of its 16 KB during a
-download. The power case, against production on battery, is still to run.
+download.

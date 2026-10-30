@@ -33,9 +33,9 @@ Replace `<environment>` with your board's target name, such as
 with the value in the matching checksum file (use the PhotoPainter filename
 for that board). The release also includes `SHA256SUMS` covering every image.
 
-`wignet-waveshare_photopainter_73e6-app.bin` is the application alone: the
-Wignet server installs it over the air on a PhotoPainter that already runs
-this firmware. Never flash it at 0x0.
+`wignet-<environment>-app.bin` is the application alone: the Wignet server
+installs it over the air on a frame that already runs this firmware (on the
+7.5-inch, with the new partition table below). Never flash it at 0x0.
 
 Replace `PORT` with the board's port, such as `/dev/ttyACM0`,
 `/dev/cu.usbserial-…` or `COM3`:

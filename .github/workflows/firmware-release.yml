@@ -22,6 +22,7 @@ jobs:
         # after its bench (docs/ota_bench.md) and with ota1 declared.
         include:
           - environment: waveshare_driver_75v2
+            ota: true
           - environment: waveshare_photopainter_73e6
             ota: true
     steps:
