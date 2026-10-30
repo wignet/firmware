@@ -321,7 +321,7 @@ while flashing and verifying: mounting an ext4 partition changes its
 superblock, so a subsequent byte comparison will fail even after a correct
 write. Verify the written image and safely eject before booting the Pi.
 
-## Updates over the air: A/B slots (wignet/wignet#322)
+## Updates over the air: A/B slots (fablamenas/wignet#322)
 
 The card holds two root slots: `p1` boot (vfat) | `p2` root A | `p3` root B |
 `p4` `/data`. The boot partition keeps the shared firmware (`bootcode.bin`,

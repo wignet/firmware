@@ -1,4 +1,4 @@
-"""Over-the-air updates for the Buildroot Wignet TV (wignet/wignet#322).
+"""Over-the-air updates for the Buildroot Wignet TV (fablamenas/wignet#322).
 
 The contract is the ESP32's (docs/ota.md on the server): a signed `otaOffer`
 on `/schedule`, bound to this poll's `on=` nonce; `ota=`/`oc=` reports; a
