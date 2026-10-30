@@ -312,6 +312,7 @@ Which boards can sense power, checked in the firmware on 2026-09-29:
 | --- | --- | --- |
 | `waveshare_photopainter_73e6` | Yes: AXP2101 VBUS status | Yes: AXP2101 voltage and fuel gauge (uncalibrated) |
 | `waveshare_esp32s3_lcd_154` | Partly, since 2026-10-19: charging (GPIO3 low) or a computer on its USB (`Serial.isPlugged()`); a wall charger with a full cell reads as battery. `stays_awake1` | Yes: voltage through a x3 divider on GPIO1, a percentage from a LiPo curve |
+| `waveshare_esp32s3_amoled_18` | Not yet: always awake (`WIGNET_ALWAYS_POWERED`); its AXP2101 is not read | Not yet: the AXP2101 could give it |
 | `firebeetle_75v2` (DFR0478) | Probably not | Maybe: a divider to an analog pin; check the board before relying on it |
 | `waveshare_driver_*`, `d1_mini_*` | No | No (a D1 mini could read A0 if the battery is wired to it) |
 
@@ -323,6 +324,13 @@ Which boards can sense power, checked in the firmware on 2026-09-29:
 - **BUSY timeout:** Spectra 6 refreshes take ~30 s, beyond GxEPD2's 20 s
   default. A timeout that is too short lets sleep cut a refresh; the
   PhotoPainter HAL raises it to 60 s.
+- **GxEPD2's `init()` calls `SPI.begin()`** on the board's default pins
+  (SCK 12, MOSI 11 on an ESP32-S3). A colour board on its own SPI pins
+  starts `SPI` first (the LCD HAL); one whose panel is driven by another bus
+  (the 1.8" AMOLED's QSPI) never calls `display.init()`.
+- **PNGdec holds two rows** of at most `PNG_MAX_BUFFERED_PIXELS` bytes,
+  320 px of RGBA by default: a wider colour screen raises it in its
+  environment, or every PNG fails to decode and the 1-bit BMP is shown.
 - **Mounting rotation** is set twice on a colour board:
   `getDefaultDisplayRotation()` for 1-bit drawing, `renderPackedColor()` in
   the HAL for WGN6.

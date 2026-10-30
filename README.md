@@ -45,6 +45,7 @@ For a TV, flash the Raspberry Pi image instead: [raspberry-tv/README.md](raspber
 | Wemos/Lolin D1 mini ESP8266 | 7.5" V2 / 3.52" | `d1_mini_75v2`, `d1_mini_35` |
 | Waveshare ESP32-S3-LCD-1.54 | 1.54" LCD, turns itself | `waveshare_esp32s3_lcd_154` |
 | Waveshare ESP32-S3-LCD-2 | 2" LCD, scenes | `waveshare_esp32s3_lcd_2` |
+| Waveshare ESP32-S3-Touch-AMOLED-1.8 | 1.8" AMOLED, 448×368; screen only so far | `waveshare_esp32s3_amoled_18` |
 | Raspberry Pi Zero W | any HDMI TV | [raspberry-tv/](raspberry-tv/) |
 
 Wiring, switches and per-board notes: [esp32/README.md](esp32/README.md).
