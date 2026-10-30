@@ -112,3 +112,43 @@ booting the image, and the previous one reported `rolledback`). The first run of
 board checked the offer's signature against the offer's own `nonce` field, so
 an offer from an earlier poll was accepted. It now checks against the nonce
 its poll sent.
+
+## The 7.5 V2 (wignet/firmware#14)
+
+The Waveshare ESP32 Driver Board + 7.5" V2 passes the same gate before its
+production build declares `ota1`. Its bench build is
+`[env:waveshare_driver_75v2_ota1_bench]`; the bench server signs for the
+`hw=` the board sends, so `bench/` and the commands above serve it as they
+are, with that environment name. Flash the bench build with `-t upload`, not
+just its application: it carries the new partition table
+(`esp32/partitions/ota_4m.csv`, two 1.75 MiB app slots).
+
+What differs from the PhotoPainter:
+
+- **Wrong chip**: offer the PhotoPainter build (an ESP32-S3 image, 1.26 MB,
+  which fits the 1.75 MiB slot): `ota=failed:<id>:chip`.
+- **Power**: the board cannot measure its power (`PowerHAL::available()` is
+  false), so the signed `powerSource` decides. Against production, on
+  battery and with the frame's power left `unknown` on its page, it must
+  report `ota=failed:<id>:power`.
+- **Memory**: no PSRAM. Note the `[OTA] Loop stack left at worst` line and,
+  during the `none` run, that the download completes after the TLS handshake
+  (#7 measured 121,880 bytes free and a 73,716-byte largest block after TLS).
+- **Old layout**: the production build flashed alone at 0x10000 over the old
+  table (1.25 MiB slots) must not declare `ota1` (main.cpp checks the
+  inactive slot is at least 1.75 MiB).
+- **Wi-Fi after migration**: `-t upload` from the old layout keeps NVS
+  (same offset and size in both tables), so saved networks survive.
+- **The order of the cases**: `wrong_counter` reuses the last counter the
+  server handed out, which is consumed only if the board accepted that offer.
+  Run it right after a case that installs or fails (`wrong_hash`), never after
+  a refusal: there it is a valid offer and the board installs it.
+
+Every case above, network faults and built-in ones, passed on a 7.5 V2
+(ESP32-D0WD-V3, 4 MiB) on 2026-10-30: counters 26 to 45, migration from the
+old layout with its three saved networks kept. Two fixes came out of it.
+`expired` was first accepted: the board had no clock, nothing on it started
+SNTP, so the OTA client now does. And `OtaClient::begin()` ran before
+`Serial.begin()`, which loses what it says at boot on a UART console; it now
+runs just after. The loop stack kept at least 9,340 of its 16 KB during a
+download. The power case, against production on battery, is still to run.

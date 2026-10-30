@@ -85,8 +85,9 @@ def package_release(source, target, env):
     if os.environ.get("WIGNET_RELEASE_APP") == "1":
         app = Path(env.subst("$BUILD_DIR/${PROGNAME}.bin")).read_bytes()
         # The server installs only an image that declares ota1 itself, found
-        # by this literal: one that did not would strand its board.
-        if b"%2Cota1" not in app:
+        # by this literal: one that did not would strand its board. The 7.5 V2
+        # declares it alone, so first (`v1%3Aota1`).
+        if b"%2Cota1" not in app and b"v1%3Aota1" not in app:
             raise RuntimeError("An over-the-air image must declare ota1 (WIGNET_OTA_CAPABLE)")
         app_name = f"{prefix}-app.bin"
         (output / app_name).write_bytes(app)

@@ -11,6 +11,7 @@
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <esp_random.h>
+#include <esp_sntp.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 #include <esp_timer.h>
@@ -682,6 +683,10 @@ bool pending() {
 }
 
 String pollQuery() {
+  // A clock to judge `expires` by (docs/ota.md): a board with no alarm clock
+  // (the 7.5 V2) starts SNTP here. Its time then outlives deep sleep.
+  if (!sntp_enabled()) configTime(0, 0, "time.cloudflare.com", "time.google.com", "pool.ntp.org");
+
   uint8_t raw[16];
   esp_fill_random(raw, sizeof(raw));
   toHex(raw, sizeof(raw), nonceOutstanding);
