@@ -122,3 +122,12 @@ the supported board and check the full portal → Wi-Fi → owner page → first
 publication path, then a reboot that remembers Wi-Fi. Record what was
 checked in the release notes. Downloadable binaries are GPL-3.0-or-later;
 their exact source is available at the release tag.
+
+A tag also builds the HDMI TV's Buildroot image (Pi Zero W, about an hour):
+`wignet-raspberry_pi_hdmi-sdcard.img.xz`, the card for a first install, and
+`wignet-raspberry_pi_hdmi-rootfs.ext4.xz`, the root filesystem the server
+offers over the air once the release is published. The job refuses a dirty
+build, a root ext4 with a journal, an image without `WIGNET_TV_OTA=ab`, and a
+development SSH key. Run it by hand on a branch with `gh workflow run
+firmware-release.yml --ref <branch>`. Before publishing, flash the card image
+and update a TV over the air to the root filesystem (`raspberry-tv/README.md`).

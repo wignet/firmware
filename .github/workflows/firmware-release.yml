@@ -46,9 +46,66 @@ jobs:
           path: esp32/.pio/release/${{ matrix.environment }}/*
           if-no-files-found: error
 
+  # The HDMI TV's Buildroot image (raspberry-tv/README.md): the SD card for a
+  # first install, and the root filesystem the server offers over the air
+  # (wignet-raspberry_pi_hdmi-rootfs.ext4.xz, docs/ota.md "Raspberry Pi
+  # profile" on the server). About an hour: only for tags and by hand.
+  tv:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      BUILDROOT_TAG: "2026.02.3"
+      BUILDROOT_COMMIT: 679b9ead7620bbf193620d1ebf56f53c1764d37a
+      BR2_DL_DIR: ${{ github.workspace }}/../buildroot-dl
+      OUT: ${{ github.workspace }}/../buildroot-output
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Buildroot's host tools
+        run: sudo apt-get update && sudo apt-get install -y bc cpio rsync unzip file e2fsprogs
+      - name: Fetch Buildroot ${{ env.BUILDROOT_TAG }}
+        run: |
+          git clone --depth 1 --branch "$BUILDROOT_TAG" https://gitlab.com/buildroot.org/buildroot.git ../buildroot
+          test "$(git -C ../buildroot rev-parse HEAD)" = "$BUILDROOT_COMMIT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.BR2_DL_DIR }}
+          key: buildroot-dl-${{ env.BUILDROOT_TAG }}-${{ hashFiles('raspberry-tv/buildroot/configs/*', 'raspberry-tv/buildroot/package/**') }}
+          restore-keys: buildroot-dl-${{ env.BUILDROOT_TAG }}-
+      - name: Build the image
+        run: |
+          make -C ../buildroot O="$OUT" BR2_EXTERNAL="$PWD/raspberry-tv/buildroot" wignet_tv_pi0w_defconfig
+          make -C ../buildroot O="$OUT"
+      # What the server would refuse, or what an owner must never receive.
+      - name: Check the image
+        run: |
+          rootfs="$OUT/images/rootfs.ext4"
+          version=$(debugfs -R "cat /usr/local/lib/wignet-tv/VERSION" "$rootfs")
+          echo "fw=$version"
+          [[ "$version" =~ ^[0-9a-f]{12}$ ]] || { echo "::error::not a clean build: $version"; exit 1; }
+          if dumpe2fs -h "$rootfs" | grep -q '^Filesystem features:.*has_journal'; then
+            echo "::error::the root ext4 has a journal: its slot would never hash to its image"; exit 1
+          fi
+          debugfs -R "cat /etc/wignet-tv.conf" "$rootfs" | grep -qx 'WIGNET_TV_OTA=ab'
+          if debugfs -R "stat /root/.ssh/authorized_keys" "$rootfs" 2>/dev/null | grep -q Inode; then
+            echo "::error::a development SSH key is in the image"; exit 1
+          fi
+      - name: Name and hash the images
+        run: |
+          mkdir release
+          xz -T0 -6 -c "$OUT/images/rootfs.ext4" > release/wignet-raspberry_pi_hdmi-rootfs.ext4.xz
+          xz -T0 -6 -c "$OUT/images/sdcard.img" > release/wignet-raspberry_pi_hdmi-sdcard.img.xz
+          (cd release && sha256sum wignet-raspberry_pi_hdmi-* > raspberry_pi_hdmi-SHA256SUMS)
+          cat release/raspberry_pi_hdmi-SHA256SUMS
+          ls -l release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-raspberry_pi_hdmi
+          path: release/*
+          if-no-files-found: error
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, tv]
     runs-on: ubuntu-latest
     permissions:
       contents: write
