@@ -96,7 +96,10 @@ configuration or uncommitted firmware inputs. It uses PlatformIO's flash
 offsets and esptool's `merge_bin`.
 
 The GitHub workflow builds pull requests and `v*` tags. A tag creates a
-**draft** release. Before publishing it, flash the exact attached image onto
+**draft** release, whose notes are `docs/changelog/<tag>.md` plus a link to
+this guide; a tag without that file fails. Write it for owners: the server
+shows it on the frame's page when it offers the release, so a few lines on
+what changes for them, no install steps. Before publishing the release, flash the exact attached image onto
 the supported board and check the full portal → Wi-Fi → owner page → first
 publication path, then a reboot that remembers Wi-Fi. Record what was
 checked in the release notes. Downloadable binaries are GPL-3.0-or-later;
