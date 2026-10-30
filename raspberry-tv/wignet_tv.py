@@ -45,6 +45,8 @@ CAPS = "v1:rgb,screen_size1,power_report1"
 # The TV's speakers ring the Wignet's sounds: alarms, one-off events and
 # pushed chimes (sound_list1: the whole upcoming list; tune_mml1: MML tunes).
 SOUND_CAPS = CAPS + ",wake_alarm,audio_out,sound_list1,tune_mml1"
+# ota1: updates itself over the air (tv_ota.py), Buildroot image only.
+OTA_CAPS = ",ota1"
 FALLBACK_SECONDS = 60
 MIN_SECONDS = 1
 MAX_SECONDS = 86400
@@ -147,11 +149,12 @@ class Settings:
     def image_query(self):
         return urlencode({"mac": self.mac, "w": self.width, "h": self.height})
 
-    def schedule_query(self):
+    def schedule_query(self, extra=None):
         query = {"mac": self.mac, "w": self.width, "h": self.height,
                  "caps": self.caps, "pwr": "ext", "hw": "raspberry_pi_hdmi"}
         if self.fw:
             query["fw"] = self.fw
+        query.update(extra or {})
         return urlencode(query)
 
     @property
@@ -160,7 +163,11 @@ class Settings:
 
     @property
     def schedule_url(self):
-        return f"{self.host}/schedule?{self.schedule_query()}"
+        return self.schedule_url_with()
+
+    def schedule_url_with(self, extra=None):
+        """With `extra` fields, such as this poll's OTA nonce and report."""
+        return f"{self.host}/schedule?{self.schedule_query(extra)}"
 
 
 FIRMWARE_VERSION = re.compile(r"[0-9a-f]{7,40}(-dirty\.[0-9a-f]{8})?|unknown")
@@ -353,20 +360,35 @@ class EventWakeScheduler:
             self.power.wake_tv(hold_seconds=max(0, window_remaining - delay_seconds))
 
 
-def next_seconds(settings, player=None):
-    """Ask when to poll again; hand the answer's sounds to `player`."""
+def next_seconds(settings, player=None, ota=None):
+    """Ask when to poll again; hand the answer's sounds to `player` and its
+    update offer or confirmation to `ota` (tv_ota.py), which may shorten it."""
+    url = settings.schedule_url if ota is None else settings.schedule_url_with(ota.query())
     try:
-        with urlopen(Request(settings.schedule_url, headers={"Accept": "application/json"}), timeout=15) as response:
+        with urlopen(Request(url, headers={"Accept": "application/json"}), timeout=15) as response:
             payload = json.loads(response.read())
         value = payload["nextRefreshSec"]
         if type(value) is not int or not MIN_SECONDS <= value <= MAX_SECONDS:
             raise ValueError("invalid nextRefreshSec")
     except (HTTPError, URLError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
         print(f"schedule unavailable ({exc}); retrying in {FALLBACK_SECONDS}s", file=sys.stderr)
-        return FALLBACK_SECONDS
+        # A pending image still keeps its deadline without an answer.
+        return FALLBACK_SECONDS if ota is None else ota.answer(None, FALLBACK_SECONDS)
     if player is not None:
         player.update(payload)
-    return value
+    return value if ota is None else ota.answer(payload, value)
+
+
+def start_ota(mac, state_dir):
+    """The A/B updater when WIGNET_TV_OTA=ab, else None."""
+    if os.environ.get("WIGNET_TV_OTA", "").strip().lower() != "ab":
+        return None
+    try:
+        import tv_ota
+    except ImportError as exc:  # a Pi OS install without tv_ota.py
+        print(f"over-the-air updates disabled ({exc})", file=sys.stderr)
+        return None
+    return tv_ota.from_environment(mac, state_dir)
 
 
 def sound_enabled():
@@ -589,7 +611,7 @@ class Display:
 
 
 def poll_once(settings, display, etag, state_dir, first_frame=False,
-              event_waker=None, player=None):
+              event_waker=None, player=None, ota=None):
     """Fetch the server-selected frame, then ask when to poll it again."""
     try:
         # The splash replaced whatever was on screen before restart.  Do not
@@ -608,7 +630,7 @@ def poll_once(settings, display, etag, state_dir, first_frame=False,
         print(f"image unavailable ({exc}); keeping the current page", file=sys.stderr)
     # An event boundary can change the selected image without any local logic.
     # The image comes first, so a pushed text is on screen before its sound.
-    return etag, next_seconds(settings, player)
+    return etag, next_seconds(settings, player, ota)
 
 
 def main(argv=None):
@@ -638,18 +660,21 @@ def main(argv=None):
     if width is None:
         width, height = display.size
     player = None if once else start_player(state_dir, power)
+    # Over-the-air updates on the Buildroot image's A/B slots only.
+    ota = None if once else start_ota(mac, state_dir)
+    caps = SOUND_CAPS if player is not None else CAPS
     settings = Settings(host, mac, *checked_size(width, height),
-                        caps=SOUND_CAPS if player is not None else CAPS,
+                        caps=caps + OTA_CAPS if ota is not None else caps,
                         fw=installed_version())
     # Declare first: until the server has read caps=, the PNG answers 406.
     # Every normal cycle below keeps the common Wignet order: image, schedule,
     # wait.  The server then chooses the image for any active event or slide.
-    next_seconds(settings, player)
+    next_seconds(settings, player, ota)
     etag = load_etag(state_dir)
     while True:
         etag, delay = poll_once(settings, display, etag, state_dir,
                                 first_frame=not display.has_page,
-                                event_waker=event_waker, player=player)
+                                event_waker=event_waker, player=player, ota=ota)
         if once:
             return 0
         display.wait(delay)

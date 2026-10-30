@@ -5,7 +5,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -91,6 +91,35 @@ class TvClientTests(unittest.TestCase):
                                                 "application/json")):
             self.assertEqual(wignet_tv.next_seconds(self.settings, Player()), 60)
         self.assertEqual(answers, [{"nextRefreshSec": 60, "sounds": []}])
+
+    def test_schedule_carries_the_ota_fields_and_hands_it_the_answer(self):
+        class Ota:
+            answers = []
+
+            def query(self):
+                return {"on": "ab" * 16, "ota": "pending:0123456789abcdef", "oc": 7}
+
+            def answer(self, payload, seconds):
+                self.answers.append((payload, seconds))
+                return 30
+
+        ota = Ota()
+        with patch.object(wignet_tv, "urlopen",
+                          return_value=Response(b'{"nextRefreshSec": 600}', "application/json")) as opened:
+            self.assertEqual(wignet_tv.next_seconds(self.settings, ota=ota), 30)
+        url = opened.call_args[0][0].full_url
+        self.assertIn("on=" + "ab" * 16, url)
+        self.assertIn("ota=pending%3A0123456789abcdef&oc=7", url)
+        self.assertEqual(ota.answers, [({"nextRefreshSec": 600}, 600)])
+        # No answer at all: the updater still sees the poll, for its deadline.
+        with patch.object(wignet_tv, "urlopen", side_effect=URLError("down")), \
+             patch.object(sys, "stderr"):
+            self.assertEqual(wignet_tv.next_seconds(self.settings, ota=ota), 30)
+        self.assertEqual(ota.answers[-1], (None, wignet_tv.FALLBACK_SECONDS))
+
+    def test_ota_stays_off_without_the_ab_image(self):
+        with patch.dict(wignet_tv.os.environ, {"WIGNET_TV_OTA": ""}):
+            self.assertIsNone(wignet_tv.start_ota("02:00:00:00:00:09", "/nonexistent"))
 
     def test_a_short_answer_near_an_event_edge_is_followed_not_replaced_by_the_fallback(self):
         # The server answers the seconds to the next edge (1 to 9 near it): a
