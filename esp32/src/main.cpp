@@ -45,11 +45,11 @@ SET_LOOP_TASK_STACK_SIZE(16 * 1024);
 #include <Adafruit_GFX.h>
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
-#include <Fonts/Org_01.h>
 #include <PNGdec.h>
 #include <esp_heap_caps.h>
 #include "boot_image.h"
 #endif
+#include <Fonts/Org_01.h> // small print, LCD and e-paper alike
 #if defined(WIGNET_HAS_IMU)
 #include "orientation_hal.h"
 #endif
@@ -1809,45 +1809,44 @@ void displayStartupScreen(String mac, String ip) {
   return;
 #endif
 
-  // Auto-select rotation: 0 for large screens (7.5"), 1 for small (2.7")
-  int rotation = getDefaultDisplayRotation();
-  display.setRotation(rotation);
+  // The Wignet mark centred, white on black, and the MAC and IP in small
+  // print at the bottom left. The platform's first page replaces it within
+  // seconds. The mark (AGENTS.md "The Wignet mark"): two squares of side S
+  // side by side; in the left one the bottom quarter cut by both diagonals,
+  // in the right one the bottom-left half below its top-left/bottom-right
+  // diagonal. Drawn row by row so each square is exactly S x S pixels.
+  display.setRotation(getDefaultDisplayRotation());
   display.setFullWindow();
   display.firstPage();
 
-  int screenHeight = display.height();
-  bool isSmallScreen =
-      (DisplayHAL::getWidth() < 400); // Check based on original width
+  const int w = display.width(), h = display.height();
+  const int u = max(2, min(w, h) / 64);   // 7 px on 800x480
+  const int S = 16 * u;                   // 112 px: a 224x112 mark
+  const int x0 = (w - 2 * S) / 2, y0 = (h - S) / 2;
+  const int margin = 4 * u;
+  const int textSize = max(1, u / 3);     // Org_01 is 5 px tall
+  const int lineHeight = 10 * textSize;
+  const String lines[] = {"MAC " + mac, "IP " + ip};
 
   do {
-    display.fillScreen(GxEPD_WHITE);
-    display.setFont(nullptr);
-    display.cp437(true);
-    display.setTextColor(GxEPD_BLACK);
-
-    if (isSmallScreen) {
-      // Compact layout for 2.7" (176x264)
-      display.setTextSize(1);
-      drawCenteredBuiltInLine(mac, 40, 1);
-      drawCenteredBuiltInLine(ip, 70, 1);
-
-      display.setTextSize(2);
-      drawCenteredBuiltInLine("Open /epaper", 125, 2);
-
-    } else {
-      // Large screen (7.5"): Full layout
-      display.setTextSize(4);
-      drawCenteredBuiltInLine(mac, screenHeight / 2 - 60, 4);
-      drawCenteredBuiltInLine(ip, screenHeight / 2 + 5, 4);
-
-      // Technical info at bottom
-      display.setTextSize(3);
-      display.setCursor(20, screenHeight - 50);
-      display.print("Open /epaper");
-      display.setCursor(20, screenHeight - 25);
-      display.print("Or access: " + ip);
+    display.fillScreen(GxEPD_BLACK);
+    for (int r = 0; r < S; r++) {
+      const int y = y0 + r;
+      // Left square: rows of the bottom quarter, centred, widening to S.
+      if (2 * r >= S - 1)
+        display.drawFastHLine(x0 + S - 1 - r, y, 2 * r - S + 2, GxEPD_WHITE);
+      // Right square: from its left edge to the diagonal, r + 1 wide.
+      display.drawFastHLine(x0 + S, y, r + 1, GxEPD_WHITE);
     }
 
+    display.setFont(&Org_01);
+    display.setTextSize(textSize);
+    display.setTextColor(GxEPD_WHITE);
+    for (int i = 0; i < 2; i++) {
+      display.setCursor(margin, h - margin - (1 - i) * lineHeight);
+      display.print(lines[i]);
+    }
+    display.setFont(nullptr);
   } while (display.nextPage());
 }
 

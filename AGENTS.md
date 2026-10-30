@@ -46,3 +46,24 @@ image fetching or wake scheduling. It is the client/server contract.
   change goes to the platform first.
 - Names such as `backoffice/…` in comments point to the hosted platform,
   which is not in this repository.
+
+## The Wignet mark
+
+Drawn by the firmware itself (the e-paper startup screen,
+`displayStartupScreen` in `esp32/src/main.cpp`), never as a stretched picture:
+
+- Two invisible squares of the same side S, side by side, touching.
+- Left square: split in four by both its diagonals; the mark is the bottom
+  quarter, a triangle with its apex at the square's centre.
+- Right square: split in two by its top-left to bottom-right diagonal; the mark
+  is the bottom-left half, a right triangle with its right angle at the
+  bottom-left corner.
+- The 2S x S box is centred on the screen. Draw it row by row in whole pixels
+  (row r of S: the left one centred, `2r - S + 2` wide from row `(S - 1) / 2`;
+  the right one `r + 1` wide from the square's left edge) so each square is
+  exactly S x S and the two bottom rows meet with no gap or overhang.
+  `fillTriangle` on corner coordinates spills one pixel past the square.
+- Startup screen: white mark on black, MAC and IP in small print (Org_01) at
+  the bottom left, in English.
+- The LCD boards show the same mark from a picture
+  (`esp32/assets/boot_lcd154.png`, `#F7F2E8` on black).
