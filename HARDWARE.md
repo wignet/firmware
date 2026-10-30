@@ -92,6 +92,27 @@ including what was and was not validated on hardware.
   server silently ignores unknown tokens. A value that is not yes/no (battery
   voltage) needs its own `/schedule` parameter, documented in DEVICE_API.md.
 
+## The Wignet mark
+
+Drawn by the firmware itself (the e-paper startup screen,
+`displayStartupScreen` in `esp32/src/main.cpp`), never as a stretched picture:
+
+- Two invisible squares of the same side S, side by side, touching.
+- Left square: split in four by both its diagonals; the mark is the bottom
+  quarter, a triangle with its apex at the square's centre.
+- Right square: split in two by its top-left to bottom-right diagonal; the mark
+  is the bottom-left half, a right triangle with its right angle at the
+  bottom-left corner.
+- The 2S x S box is centred on the screen. Draw it row by row in whole pixels
+  (row r of S: the left one centred, `2r - S + 2` wide from row `(S - 1) / 2`;
+  the right one `r + 1` wide from the square's left edge) so each square is
+  exactly S x S and the two bottom rows meet with no gap or overhang.
+  `fillTriangle` on corner coordinates spills one pixel past the square.
+- Startup screen: white mark on black, MAC and IP in small print (Org_01) at
+  the bottom left, in English.
+- The LCD boards show the same mark from a picture
+  (`esp32/assets/boot_lcd154.png`, `#F7F2E8` on black).
+
 ## Several sounds: read `sounds` when you can hold them
 
 A board with alarm audio should declare `sound_list1` and keep `/schedule`'s

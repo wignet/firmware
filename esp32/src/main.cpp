@@ -1811,7 +1811,7 @@ void displayStartupScreen(String mac, String ip) {
 
   // The Wignet mark centred, white on black, and the MAC and IP in small
   // print at the bottom left. The platform's first page replaces it within
-  // seconds. The mark (AGENTS.md "The Wignet mark"): two squares of side S
+  // seconds. The mark (HARDWARE.md "The Wignet mark"): two squares of side S
   // side by side; in the left one the bottom quarter cut by both diagonals,
   // in the right one the bottom-left half below its top-left/bottom-right
   // diagonal. Drawn row by row so each square is exactly S x S pixels.
