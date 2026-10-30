@@ -58,12 +58,23 @@ jobs:
           pattern: firmware-*
           merge-multiple: true
           path: firmware
+      # The notes are what owners read on their frame's page when the server
+      # offers this release: the version's changelog, not the flashing guide.
       - name: Prepare a draft release for hardware validation
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          changelog="docs/changelog/$RELEASE_TAG.md"
+          if [ ! -s "$changelog" ]; then
+            echo "::error::$changelog is missing: write what changed for owners"
+            exit 1
+          fi
+          { cat "$changelog"
+            printf '\nInstall over USB: https://github.com/%s/blob/%s/docs/flashing.md\n' \
+              "$GITHUB_REPOSITORY" "$RELEASE_TAG"
+          } > notes.md
           cat firmware/*-SHA256SUMS > firmware/SHA256SUMS
           gh release create "$RELEASE_TAG" firmware/* \
             --verify-tag --draft --title "Wignet firmware $RELEASE_TAG" \
-            --notes-file docs/flashing.md
+            --notes-file notes.md
