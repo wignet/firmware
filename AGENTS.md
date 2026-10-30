@@ -46,5 +46,5 @@ image fetching or wake scheduling. It is the client/server contract.
   change goes to the platform first.
 - Names such as `backoffice/…` in comments point to the hosted platform,
   which is not in this repository.
-- The Wignet mark on a board's own screens (startup, boot): its geometry and
-  how to draw it are in `HARDWARE.md` "The Wignet mark".
+- Screens a board draws itself (power-on, Wi-Fi setup, startup, Welcome) and
+  the Wignet mark on them: `HARDWARE.md` "Start screens and the Wignet mark".
