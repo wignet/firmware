@@ -111,9 +111,10 @@ the mark beside the word Wignet in the site's paper/ink/coral palette.
 Rules for these screens:
 
 - **Light on black.** Background black; text and mark white on e-paper,
-  `#F7F2E8` on LCD. Small print takes the brand coral where the screen has a
-  colour for it: `#D56668` on LCD, red on Spectra 6 (`EPAPER_SMALL`); white
-  on black and white. Never a coloured mark.
+  `#F7F2E8` on LCD. Small print in a colour where the screen has one:
+  `#D56668` (the brand coral) on LCD, yellow on Spectra 6 (`EPAPER_SMALL`:
+  red is too dark on black there); white on black and white. Never a
+  coloured mark.
 - **No line breaks the width does not need:** the LCD's 240 px forces short
   lines; a wider panel keeps each sentence on one line.
 - **The mark is on the first screen a board shows**, which asks nothing of

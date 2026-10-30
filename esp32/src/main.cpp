@@ -58,10 +58,10 @@ SET_LOOP_TASK_STACK_SIZE(16 * 1024);
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSans24pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
-// Small print on the start screens: the LCD's coral (#D56668) as the
-// Spectra 6 red, white on black and white (HARDWARE.md "Start screens").
+// Small print on the start screens: yellow on Spectra 6, its most legible
+// ink on black; white on black and white (HARDWARE.md "Start screens").
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
-#define EPAPER_SMALL GxEPD_RED
+#define EPAPER_SMALL GxEPD_YELLOW
 #else
 #define EPAPER_SMALL GxEPD_WHITE
 #endif
