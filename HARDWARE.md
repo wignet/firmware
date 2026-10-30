@@ -101,7 +101,7 @@ consistent across boards rather than inventing a new one per target.
 | Screen | When | LCD (`WIGNET_DISPLAY_RGB`) | E-paper |
 |---|---|---|---|
 | Power-on | First thing lit | `lcdBootScreen`: the mark, centred | None: the panel keeps its last image, and a refresh takes seconds |
-| Wi-Fi setup | No known network in range | `lcdProvisioningScreen`: header, "Connect to the Wi-Fi network", the network name in bold, MAC at the bottom | `displayProvisioningScreen`: large centred text, still in French (to redo in this style) |
+| Wi-Fi setup | No known network in range | `lcdProvisioningScreen`: header, "Connect to the Wi-Fi network", the network name in bold, MAC at the bottom | `displayProvisioningScreen`: the LCD's text scaled to the panel (FreeSans 24 pt on 480 px, 12 pt on 240, 9 pt below), each sentence on one line when it fits |
 | Startup | Wi-Fi joined, before the first page | `lcdStartupScreen`: "Wi-Fi OK", MAC and IP | `displayStartupScreen`: the mark centred, MAC and IP in small print at the bottom left |
 | Welcome | The device has no content yet | `lcdWelcomeScreen` (`welcome_local1`): QR code and address | The platform's page, through `/pic` |
 
@@ -111,7 +111,11 @@ the mark beside the word Wignet in the site's paper/ink/coral palette.
 Rules for these screens:
 
 - **Light on black.** Background black; text and mark white on e-paper,
-  `#F7F2E8` on LCD; LCD small print `#D56668`. Never a coloured mark.
+  `#F7F2E8` on LCD. Small print takes the brand coral where the screen has a
+  colour for it: `#D56668` on LCD, red on Spectra 6 (`EPAPER_SMALL`); white
+  on black and white. Never a coloured mark.
+- **No line breaks the width does not need:** the LCD's 240 px forces short
+  lines; a wider panel keeps each sentence on one line.
 - **The mark is on the first screen a board shows**, which asks nothing of
   the owner: power-on on LCD, startup on e-paper. Alone, centred, its width
   about half the screen's short side (120 px on 240, 224 px on 480). Screens
