@@ -352,8 +352,9 @@ image served over an SSH tunnel: 320 MiB slot (46 MiB xz) downloaded and
 written in about 110 s; tryboot into the new slot, confirmation, then a
 normal reboot that stayed on it; an unconfirmed slot rebooted at the deadline
 into the previous one and reported `rolledback` 20 times; the guard left a
-confirmed boot alone past 660 s. The production key and server support for
-this board are still to come.
+confirmed boot alone past 660 s. The server supports this board since
+fablamenas/wignet#327; a `v*` tag builds the release images
+(`docs/flashing.md`). A run with the production key is still to come.
 
 ## Remaining hardware checks
 
