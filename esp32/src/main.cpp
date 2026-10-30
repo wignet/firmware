@@ -45,10 +45,26 @@ SET_LOOP_TASK_STACK_SIZE(16 * 1024);
 #include <Adafruit_GFX.h>
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
-#include <Fonts/Org_01.h>
 #include <PNGdec.h>
 #include <esp_heap_caps.h>
 #include "boot_image.h"
+#endif
+#include <Fonts/Org_01.h> // small print, LCD and e-paper alike
+#if !defined(WIGNET_DISPLAY_RGB)
+// The e-paper Wi-Fi setup screen, at three sizes (displayProvisioningScreen).
+#include <Fonts/FreeSans9pt7b.h>
+#include <Fonts/FreeSansBold9pt7b.h>
+#include <Fonts/FreeSans12pt7b.h>
+#include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSans24pt7b.h>
+#include <Fonts/FreeSansBold24pt7b.h>
+// Small print on the start screens: yellow on Spectra 6, its most legible
+// ink on black; white on black and white (HARDWARE.md "Start screens").
+#if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
+#define EPAPER_SMALL GxEPD_YELLOW
+#else
+#define EPAPER_SMALL GxEPD_WHITE
+#endif
 #endif
 #if defined(WIGNET_HAS_IMU)
 #include "orientation_hal.h"
@@ -1754,101 +1770,111 @@ void displayProvisioningScreen(String apName) {
   Serial.println("Displaying Provisioning Screen");
 #if defined(WIGNET_DISPLAY_RGB)
   lcdProvisioningScreen(apName);
-  return;
-#endif
+#else
 
-  // Auto-select rotation: 0 for large screens (7.5"), 1 for small (2.7")
-  int rotation = getDefaultDisplayRotation();
-  display.setRotation(rotation);
+  // The LCD's layout (lcdProvisioningScreen, drawn for 240 px of height)
+  // scaled to the panel: white on black, left-aligned, a small header and
+  // the MAC in small print at the edges (HARDWARE.md "Start screens").
+  display.setRotation(getDefaultDisplayRotation());
   display.setFullWindow();
   display.firstPage();
 
-  int screenHeight = display.height();
-  bool isSmallScreen = (DisplayHAL::getWidth() < 400);
+  const int w = display.width(), h = display.height();
+  const int u = max(2, min(w, h) / 64);
+  const int margin = 4 * u;
+  const int textSize = max(1, u / 3);     // Org_01 is 5 px tall
+  // 24 pt on 480 px, 12 pt on 240 px (the LCD's), 9 pt below.
+  const GFXfont *regular = &FreeSans9pt7b, *bold = &FreeSansBold9pt7b;
+  int k4 = 3;                             // scale from 240 px, in quarters
+  if (h >= 480) regular = &FreeSans24pt7b, bold = &FreeSansBold24pt7b, k4 = 8;
+  else if (h >= 240) regular = &FreeSans12pt7b, bold = &FreeSansBold12pt7b, k4 = 4;
+  const int middle = (h - 240 * k4 / 4) / 2;
+  struct Line { const GFXfont *font; int y; const char *text; };
+  const Line narrow[] = {{regular, 74, "Connect to the"},
+                         {regular, 100, "Wi-Fi network"},
+                         {bold, 140, apName.c_str()},
+                         {regular, 178, "to set up"},
+                         {regular, 204, "this Wignet"}};
+  // A wide panel keeps each sentence on one line.
+  const Line wide[] = {{regular, 100, "Connect to the Wi-Fi network"},
+                       {bold, 140, apName.c_str()},
+                       {regular, 178, "to set up this Wignet"}};
+  int16_t bx, by;
+  uint16_t bw, bh;
+  display.setFont(regular);
+  display.setTextSize(1);
+  display.getTextBounds(wide[0].text, 0, 0, &bx, &by, &bw, &bh);
+  const bool fits = bx + bw <= w - 2 * margin;
+  const Line *lines = fits ? wide : narrow;
+  const int lineCount = fits ? 3 : 5;
 
   do {
-    display.fillScreen(GxEPD_WHITE);
-    display.setFont(nullptr);
-    display.cp437(true);
-    display.setTextColor(GxEPD_BLACK);
-
-    if (isSmallScreen) {
-      // Compact layout for 2.7" (176x264)
-      display.setTextSize(2);
-      drawCenteredBuiltInLine("Connecte-toi", 35, 2);
-      drawCenteredBuiltInLine("au WiFi", 60, 2);
-
-      display.setTextSize(3);
-      drawCenteredBuiltInLine(apName, 105, 3);
-
-      display.setTextSize(2);
-      drawCenteredBuiltInLine("pour configurer", 155, 2);
-      drawCenteredBuiltInLine("ce Wignet", 185, 2);
-
-    } else {
-      // Large screen (7.5"): Full layout
-      display.setTextSize(5);
-      drawCenteredBuiltInLine("Connecte-toi au WiFi", screenHeight / 2 - 120,
-                              5);
-
-      display.setTextSize(7);
-      drawCenteredBuiltInLine(apName, screenHeight / 2 - 20, 7);
-
-      display.setTextSize(5);
-      drawCenteredBuiltInLine("pour configurer", screenHeight / 2 + 100, 5);
-      drawCenteredBuiltInLine("ce Wignet", screenHeight / 2 + 165, 5);
+    display.fillScreen(GxEPD_BLACK);
+    display.setTextColor(GxEPD_WHITE);
+    display.setTextSize(1);
+    for (int i = 0; i < lineCount; i++) {
+      display.setFont(lines[i].font);
+      display.setCursor(margin, middle + lines[i].y * k4 / 4);
+      display.print(lines[i].text);
     }
-
+    display.setFont(&Org_01);
+    display.setTextSize(textSize);
+    display.setTextColor(EPAPER_SMALL);
+    display.setCursor(margin, margin + 5 * textSize);
+    display.print("WIGNET  WI-FI SETUP");
+    display.setCursor(margin, h - margin);
+    display.print("MAC " + WiFi.macAddress());
+    display.setFont(nullptr);
   } while (display.nextPage());
+#endif
 }
 
 void displayStartupScreen(String mac, String ip) {
   Serial.println("Displaying Startup Screen");
 #if defined(WIGNET_DISPLAY_RGB)
   lcdStartupScreen(mac, ip);
-  return;
-#endif
+#else
 
-  // Auto-select rotation: 0 for large screens (7.5"), 1 for small (2.7")
-  int rotation = getDefaultDisplayRotation();
-  display.setRotation(rotation);
+  // The Wignet mark centred, white on black, and the MAC and IP in small
+  // print at the bottom left. The platform's first page replaces it within
+  // seconds. The mark (HARDWARE.md "The Wignet mark"): two squares of side S
+  // side by side; in the left one the bottom quarter cut by both diagonals,
+  // in the right one the bottom-left half below its top-left/bottom-right
+  // diagonal. Drawn row by row so each square is exactly S x S pixels.
+  display.setRotation(getDefaultDisplayRotation());
   display.setFullWindow();
   display.firstPage();
 
-  int screenHeight = display.height();
-  bool isSmallScreen =
-      (DisplayHAL::getWidth() < 400); // Check based on original width
+  const int w = display.width(), h = display.height();
+  const int u = max(2, min(w, h) / 64);   // 7 px on 800x480
+  const int S = 16 * u;                   // 112 px: a 224x112 mark
+  const int x0 = (w - 2 * S) / 2, y0 = (h - S) / 2;
+  const int margin = 4 * u;
+  const int textSize = max(1, u / 3);     // Org_01 is 5 px tall
+  const int lineHeight = 10 * textSize;
+  const String lines[] = {"MAC " + mac, "IP " + ip};
 
   do {
-    display.fillScreen(GxEPD_WHITE);
-    display.setFont(nullptr);
-    display.cp437(true);
-    display.setTextColor(GxEPD_BLACK);
-
-    if (isSmallScreen) {
-      // Compact layout for 2.7" (176x264)
-      display.setTextSize(1);
-      drawCenteredBuiltInLine(mac, 40, 1);
-      drawCenteredBuiltInLine(ip, 70, 1);
-
-      display.setTextSize(2);
-      drawCenteredBuiltInLine("Open /epaper", 125, 2);
-
-    } else {
-      // Large screen (7.5"): Full layout
-      display.setTextSize(4);
-      drawCenteredBuiltInLine(mac, screenHeight / 2 - 60, 4);
-      drawCenteredBuiltInLine(ip, screenHeight / 2 + 5, 4);
-
-      // Technical info at bottom
-      display.setTextSize(3);
-      display.setCursor(20, screenHeight - 50);
-      display.print("Open /epaper");
-      display.setCursor(20, screenHeight - 25);
-      display.print("Or access: " + ip);
+    display.fillScreen(GxEPD_BLACK);
+    for (int r = 0; r < S; r++) {
+      const int y = y0 + r;
+      // Left square: rows of the bottom quarter, centred, widening to S.
+      if (2 * r >= S - 1)
+        display.drawFastHLine(x0 + S - 1 - r, y, 2 * r - S + 2, GxEPD_WHITE);
+      // Right square: from its left edge to the diagonal, r + 1 wide.
+      display.drawFastHLine(x0 + S, y, r + 1, GxEPD_WHITE);
     }
 
+    display.setFont(&Org_01);
+    display.setTextSize(textSize);
+    display.setTextColor(EPAPER_SMALL);
+    for (int i = 0; i < 2; i++) {
+      display.setCursor(margin, h - margin - (1 - i) * lineHeight);
+      display.print(lines[i]);
+    }
+    display.setFont(nullptr);
   } while (display.nextPage());
+#endif
 }
 
 void clearStoredWiFiOnceForBuild() {
