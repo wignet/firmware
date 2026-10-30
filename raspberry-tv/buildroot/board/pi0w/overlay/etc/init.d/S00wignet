@@ -13,5 +13,11 @@ start)
 	# No RTC: start from the last time ntpd saw, so TLS certificates check
 	# out before the network answers.  ntpd corrects it (S45ntpd).
 	[ -f /data/clock ] && date -s "@$(date -r /data/clock +%s)" >/dev/null
+	# Booted with the tryboot flag: a new image on trial (tv_ota.py).  Unless
+	# the client confirms it, reboot after 11 minutes into config.txt's slot,
+	# the previous one, even if the client itself hangs.
+	if [ "$(od -An -tx1 /proc/device-tree/chosen/bootloader/tryboot 2>/dev/null | tr -d ' \n')" = 00000001 ]; then
+		(sleep 660; [ -e /run/wignet-ota-confirmed ] || { logger -t wignet-tv "[OTA] not confirmed: rebooting into the previous slot"; reboot; }) &
+	fi
 	;;
 esac

@@ -66,6 +66,8 @@ BR2_PACKAGE_PYTHON3=y
 BR2_PACKAGE_PYTHON3_PYC_ONLY=y
 BR2_PACKAGE_PYTHON3_SSL=y
 BR2_PACKAGE_PYTHON3_ZLIB=y
+# lzma: over-the-air images arrive xz-compressed (tv_ota.py).
+BR2_PACKAGE_PYTHON3_XZ=y
 BR2_PACKAGE_PYTHON3_UNICODEDATA=y
 BR2_PACKAGE_ZLIB=y
 BR2_PACKAGE_FREETYPE=y
@@ -77,6 +79,10 @@ BR2_PACKAGE_WIGNET_TV=y
 BR2_TARGET_ROOTFS_EXT2=y
 BR2_TARGET_ROOTFS_EXT2_4=y
 BR2_TARGET_ROOTFS_EXT2_SIZE="320M"
+# No journal: the root is read-only, and the kernel rewrites a journal's
+# superblock on mount, even read-only, so the slot would no longer hash to
+# its OTA image (`oh=`, #322).
+BR2_TARGET_ROOTFS_EXT2_MKFS_OPTIONS="-O ^64bit,^has_journal"
 # BR2_TARGET_ROOTFS_TAR is not set
 BR2_PACKAGE_HOST_DOSFSTOOLS=y
 BR2_PACKAGE_HOST_GENIMAGE=y

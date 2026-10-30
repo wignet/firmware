@@ -1,6 +1,10 @@
 # Wignet TV, Raspberry Pi Zero W.  See ../../README.md.
 start_file=start.elf
 fixup_file=fixup.dat
+# A/B updates (tv_ota.py): the kernel, device tree, overlays and cmdline.txt
+# of the running root slot are in its directory.  The client rewrites this
+# line for the other slot in tryboot.txt, then here once it is confirmed.
+os_prefix=p2/
 kernel=zImage
 
 # No rainbow square, no boot delay: the TV stays black until the Wignet splash.

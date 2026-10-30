@@ -321,6 +321,40 @@ while flashing and verifying: mounting an ext4 partition changes its
 superblock, so a subsequent byte comparison will fail even after a correct
 write. Verify the written image and safely eject before booting the Pi.
 
+## Updates over the air: A/B slots (wignet/wignet#322)
+
+The card holds two root slots: `p1` boot (vfat) | `p2` root A | `p3` root B |
+`p4` `/data`. The boot partition keeps the shared firmware (`bootcode.bin`,
+`start.elf`, `fixup.dat`) at its top and each slot's kernel, device tree,
+overlays and `cmdline.txt` in a directory named after it; `config.txt`
+picks the running one with `os_prefix=p2/` or `p3/`. A card from before this
+layout cannot be updated over the air: flash this image once.
+
+`tv_ota.py` follows the ESP32 contract of `docs/ota.md` on the server (signed
+`otaOffer` bound to the poll's `on=` nonce, `ota=`/`oc=` reports, `oh=` and a
+signed `otaConfirm` while pending), with `hw` `raspberry_pi_hdmi`. The
+artifact is the root filesystem image, served xz-compressed; `sha256` and
+`size` are those of the uncompressed ext4, the bytes the slot holds. The
+client writes the other slot, checks the hash, copies its `/boot` to `pN/`,
+writes `tryboot.txt` and reboots once with the firmware's tryboot flag. A
+signed confirmation turns `tryboot.txt` into `config.txt`; without one, the
+client reboots at 600 s uptime (S00wignet's guard at 660 s, `panic=10`, a
+power cut: any reboot loads `config.txt`, so the previous slot). The image
+enables it with `WIGNET_TV_OTA=ab` in `/etc/wignet-tv.conf`; Pi OS installs
+do not.
+
+The root ext4 has no journal: the kernel rewrites a journal's superblock on
+mount, even read-only, so the running slot would no longer hash to its image
+and `oh=` would never match the offer.
+
+Bench on the Pi Zero W, 2026-10-30, with a throwaway signing key and the
+image served over an SSH tunnel: 320 MiB slot (46 MiB xz) downloaded and
+written in about 110 s; tryboot into the new slot, confirmation, then a
+normal reboot that stayed on it; an unconfirmed slot rebooted at the deadline
+into the previous one and reported `rolledback` 20 times; the guard left a
+confirmed boot alone past 660 s. The production key and server support for
+this board are still to come.
+
 ## Remaining hardware checks
 
 Before considering a TV client released, check on the physical Pi: a first

@@ -6,11 +6,14 @@ BOARD_DIR="$(dirname "$0")"
 GENIMAGE_CFG="${BINARIES_DIR}/genimage.cfg"
 GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
 
-FILES=()
-for i in "${BINARIES_DIR}"/*.dtb "${BINARIES_DIR}"/rpi-firmware/*; do
-	FILES+=( "${i#"${BINARIES_DIR}"/}" )
-done
-FILES+=( zImage )
+# The shared firmware and config.txt at the top; slot p2's kernel, device
+# tree, overlays and cmdline.txt in p2/ (os_prefix=p2/), the same files as
+# its rootfs's /boot.  p3/ appears with the first over-the-air update.
+rm -rf "${BINARIES_DIR}/p2"
+cp -r "${TARGET_DIR}/boot" "${BINARIES_DIR}/p2"
+rm "${BINARIES_DIR}/p2/config.txt"
+cp "${TARGET_DIR}/boot/config.txt" "${BINARIES_DIR}/config.txt"
+FILES=( rpi-firmware/bootcode.bin rpi-firmware/start.elf rpi-firmware/fixup.dat config.txt p2 )
 BOOT_FILES=$(printf '\\t\\t\\t"%s",\\n' "${FILES[@]}")
 sed "s|#BOOT_FILES#|${BOOT_FILES}|" "${BOARD_DIR}/genimage.cfg" >"${GENIMAGE_CFG}"
 

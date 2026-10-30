@@ -17,7 +17,7 @@ define WIGNET_TV_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 0755 $(addprefix $(@D)/,wignet_tv.py wifi_setup.py cec.py tv_power.py \
 		boot-splash.sh) $(WIGNET_TV_LIB)/
 	$(INSTALL) -m 0644 $(addprefix $(@D)/,wifi_wpa.py sound_list.py sound_player.py \
-		tune_render.py mml.py) $(WIGNET_TV_LIB)/
+		tune_render.py mml.py tv_ota.py) $(WIGNET_TV_LIB)/
 	python3 $(BR2_EXTERNAL_WIGNET_PATH)/../tv_version.py >$(WIGNET_TV_LIB)/VERSION
 	$(INSTALL) -m 0644 $(WIGNET_TV_PORTAL)/wifi.html $(WIGNET_TV_PORTAL)/connect.html \
 		$(WIGNET_TV_LIB)/portal/
