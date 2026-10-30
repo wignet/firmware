@@ -21,14 +21,13 @@
 
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6) || defined(WIGNET_BATTERY_ADC_PIN)
 #include "power_hal.h"
-#if defined(WIGNET_OTA_CLIENT)
-#include "ota_client.h"
 #endif
 #if defined(WIGNET_OTA_CLIENT)
+#include "ota_client.h"
+#include <esp_ota_ops.h>
 // The OTA checks run on the loop task: an ECDSA verification and a TLS
 // download on top of fetchSchedule() overflow the default 8 KB stack.
 SET_LOOP_TASK_STACK_SIZE(16 * 1024);
-#endif
 #endif
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
 #include <esp_heap_caps.h>
@@ -689,6 +688,14 @@ int fetchSchedule() {
 #elif defined(WIGNET_ORIENTATION_REPORT)
   url += "&ori=" + String(lcdHeldTurn);
 #endif
+#elif defined(TARGET_WAVESHARE_DRIVER_75V2) && defined(WIGNET_OTA_CAPABLE)
+  // ota1 only once the USB migration has put the 1.75 MiB slots on the board
+  // (partitions/ota_4m.csv): this image flashed alone over the old table
+  // can't hold a larger one (docs/ota.md "Board ids").
+  {
+    const esp_partition_t *next = esp_ota_get_next_update_partition(nullptr);
+    if (next && next->size >= 0x1c0000) url += "&caps=v1%3Aota1";
+  }
 #endif
   // The Wi-Fi networks this Wignet knows, never passwords (docs/wifi.md).
   {
@@ -2034,10 +2041,6 @@ void setup() {
   // On battery the board stays on only once the firmware holds it: before
   // anything else, while PWR may still be held down (power_hold_hal.cpp).
   PowerHoldHAL::begin();
-#if defined(WIGNET_OTA_CLIENT)
-  // The OTA deadline starts here, before Wi-Fi (docs/ota.md "Confirmation").
-  OtaClient::begin();
-#endif
   // Record boot time for deep sleep safety period
   bootTime = millis();
 
@@ -2057,6 +2060,12 @@ void setup() {
 #endif
   Serial.begin(115200);
   Serial.println("\n[Boot] Firmware " WIGNET_FW_VERSION);
+#if defined(WIGNET_OTA_CLIENT)
+  // The OTA deadline starts here, before Wi-Fi (docs/ota.md "Confirmation"),
+  // after Serial.begin(): on a UART console (the 7.5 V2) what it says at
+  // boot would be lost before.
+  OtaClient::begin();
+#endif
   StatusLED::begin();
 
 #if defined(WIGNET_HAS_AUDIO)

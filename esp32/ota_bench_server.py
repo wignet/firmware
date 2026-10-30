@@ -2,7 +2,8 @@
 """A local OTA server for the bench (docs/ota_bench.md).
 
 It speaks the contract of wignet's docs/ota.md to a bench build of the
-PhotoPainter (env waveshare_photopainter_73e6_ota1_bench): a minimal /schedule
+PhotoPainter (env waveshare_photopainter_73e6_ota1_bench) or the 7.5 V2
+(waveshare_driver_75v2_ota1_bench): a minimal /schedule
 over HTTP that offers one image and confirms it, and /firmware/<sha256>.bin
 over HTTPS. Each run can inject one fault, to check that the board refuses,
 reports or rolls back as the contract says.
@@ -41,7 +42,8 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 BENCH = pathlib.Path(__file__).resolve().parent / "bench"
 OFFER_DOMAIN = "wignet-ota1"
 CONFIRM_DOMAIN = "wignet-ota-confirm1"
-HW = "waveshare_photopainter_73e6"
+# Offers and confirmations are signed for the board that polls (its hw=):
+# one bench serves the PhotoPainter and the 7.5 V2. wrong_hw names this one.
 OTHER_HW = "waveshare_esp32s3_lcd_2"
 # One fault per run. Each says what the board should do (docs/ota.md).
 FAULTS = {
@@ -165,7 +167,8 @@ static const char kOtaCaPem[] =
         {"ip": args.ip, "port": args.port, "tls_port": args.tls_port, "counter": 0}, indent=2) + "\n")
     print(f"bench/ ready: test key {key_id(signing)}, server http://{args.ip}:{args.port}, "
           f"firmware {prefix}")
-    print("Build and flash the bench image: pio run -e waveshare_photopainter_73e6_ota1_bench -t upload")
+    print("Build and flash the bench image: pio run -e waveshare_photopainter_73e6_ota1_bench -t upload"
+          " (or waveshare_driver_75v2_ota1_bench)")
 
 
 def b64sig(key, lines):
@@ -192,12 +195,12 @@ class Bench:
         self.done = None
         self.lock = threading.Lock()
 
-    def offer(self, mac, nonce):
+    def offer(self, mac, hw, nonce):
         sha = self.sha
         if self.fault == "wrong_hash":
             sha = hashlib.sha256(self.image + b"bench").hexdigest()
         size = len(self.image) + (16 if self.fault == "wrong_size" else 0)
-        hw = OTHER_HW if self.fault == "wrong_hw" else HW
+        hw = OTHER_HW if self.fault == "wrong_hw" else hw
         expires = int(time.time()) + (-3600 if self.fault == "expired" else 86400)
         if self.fault == "stale_nonce":
             nonce = self.previous_nonce or secrets.token_hex(16)
@@ -209,12 +212,12 @@ class Bench:
                 "counter": self.counter, "expires": expires, "nonce": nonce, "powerSource": "powered",
                 "powerOverride": False, "key": self.key, "sig": b64sig(signer, lines)}
 
-    def confirm(self, mac, nonce, running_hash):
+    def confirm(self, mac, hw, nonce, running_hash):
         if self.fault == "no_confirm":
             return None
         if self.fault == "replayed_confirm":
             nonce = self.previous_nonce or secrets.token_hex(16)
-        lines = [CONFIRM_DOMAIN, mac, HW, running_hash, str(self.counter), nonce]
+        lines = [CONFIRM_DOMAIN, mac, hw, running_hash, str(self.counter), nonce]
         signer = ec.generate_private_key(ec.SECP256R1()) if self.fault == "forged_confirm" else self.signing
         return {"sha256": running_hash, "counter": self.counter, "nonce": nonce, "key": self.key,
                 "sig": b64sig(signer, lines)}
@@ -238,12 +241,12 @@ class Bench:
                 if oh != self.sha:
                     print(f"  pending image {oh[:16]} is not the offered {self.sha[:16]}: no confirmation")
                 else:
-                    confirm = self.confirm(mac, nonce, oh)
+                    confirm = self.confirm(mac, q.get("hw", ""), nonce, oh)
                     if confirm:
                         answer["otaConfirm"] = confirm
                         print(f"  otaConfirm sent ({self.fault})", flush=True)
             elif "ota1" in q.get("caps", "") and not self.done and len(nonce) == 32:
-                answer["otaOffer"] = self.offer(mac, nonce)
+                answer["otaOffer"] = self.offer(mac, q.get("hw", ""), nonce)
                 print(f"  otaOffer {self.sha[:16]} counter {self.counter} ({self.fault})", flush=True)
             self.previous_nonce = nonce or self.previous_nonce
         return answer

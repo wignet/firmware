@@ -60,6 +60,24 @@ it contains no Wi-Fi credentials or device identifier.
 
 If connecting fails, hold BOOT, tap RESET, release BOOT when flashing starts.
 
+### From the old layout (7.5-inch)
+
+Firmware from this version on gives the 7.5-inch board a new partition table:
+two 1.75 MiB application slots, so the server can later update it over the
+air (wignet/firmware#14). A partition table can't be changed over the air:
+every 7.5-inch frame takes it over USB once, with either the factory image
+above (which resets Wi-Fi) or, to keep Wi-Fi, PlatformIO from source:
+
+```sh
+cd esp32
+pio run -e waveshare_driver_75v2 -t upload
+```
+
+`-t upload` writes the bootloader, partition table and application; the
+Wi-Fi networks live in NVS, at the same place in both tables. Never flash only
+the application at 0x10000 onto a frame that has not taken the new table: it
+runs, but the frame stays without over-the-air updates.
+
 ## Connect the screen
 
 1. After flashing, the screen opens an unprotected **Wignet-XXXX** Wi-Fi
