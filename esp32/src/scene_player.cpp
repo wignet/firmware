@@ -713,7 +713,7 @@ struct Button {
 };
 Button buttons[] = {
     {"a", 0, false, false, 0}, // BOOT
-#if defined(WIGNET_BUTTON_KEY)
+#if defined(WIGNET_BUTTON_KEY) && WIGNET_BUTTON_KEY >= 0
     {"b", WIGNET_BUTTON_KEY, false, false, 0}, // PLUS
 #endif
 };
@@ -731,8 +731,43 @@ bool soundTakesPress() {
 #endif
 }
 
+#if defined(WIGNET_HAS_TOUCH)
+// touch1: a finger down on an object shown on this page is p<page>b<id>.down,
+// lifting it the matching .up. The topmost object under the finger takes it.
+int touchedId = 0, touchedPage = 0;
+bool fingerDown = false;
+
+void pollTouch() {
+  int x = 0, y = 0;
+  const bool down = DisplayHAL::touchAt(x, y, pageTurn);
+  if (down == fingerDown) return;
+  fingerDown = down;
+  if (!down) {
+    if (touchedId && scene)
+      dispatch("p" + std::to_string(touchedPage) + "b" + std::to_string(touchedId) + ".up", true);
+    touchedId = 0;
+    return;
+  }
+  if (!scene || soundTakesPress()) return;
+  for (auto it = scene->objects.rbegin(); it != scene->objects.rend(); ++it) {
+    Obj *obj = it->get();
+    if (!obj->o || obj->group || !shown(obj)) continue;
+    lv_area_t area;
+    lv_obj_get_coords(obj->o, &area);
+    if (x < area.x1 || x > area.x2 || y < area.y1 || y > area.y2) continue;
+    touchedId = obj->id;
+    touchedPage = currentPage;
+    dispatch("p" + std::to_string(touchedPage) + "b" + std::to_string(touchedId) + ".down", true);
+    return;
+  }
+}
+#endif
+
 void pollButtons(lv_timer_t *) {
   const uint32_t now = millis();
+#if defined(WIGNET_HAS_TOUCH)
+  pollTouch();
+#endif
   // PWR: the board keeps the 2 s hold (switching off); a scene may have the short press.
   if (PowerHoldHAL::takeShortPress() && scene && !soundTakesPress()) dispatch("pwr.short", true);
   for (Button &button : buttons) {
@@ -1253,7 +1288,7 @@ void begin() {
 
 String scheduleParams() {
   String out = "&in=a";
-#if defined(WIGNET_BUTTON_KEY)
+#if defined(WIGNET_BUTTON_KEY) && WIGNET_BUTTON_KEY >= 0
   out += ",b";
 #endif
   if (lastEventSeq > 0) out += "&sev=" + String(lastEventSeq);

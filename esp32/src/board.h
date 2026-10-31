@@ -20,6 +20,8 @@
 #define WIGNET_AUDIO_PA 7
 // The codec's rail is the PMIC's ALDO3, switched on before each ring.
 #define WIGNET_AUDIO_RAIL_AXP2101 1
+// Mains, battery level and charging from the PMIC (power_hal.cpp).
+#define WIGNET_POWER_AXP2101 1
 #define WIGNET_BUTTON_KEY 4
 // PWR goes through the PMIC: high when pressed, and it pulses while the
 // amplifier plays (audio_hal.cpp, PWR_HOLD_MS).
@@ -39,6 +41,33 @@
 #define WIGNET_IMU_SCREEN_Y_AXIS 1
 #define WIGNET_IMU_SCREEN_Y_SIGN 1
 #define WIGNET_IMU_SCREEN_Z_SIGN -1 // lying screen up reads z = -1 g
+
+#elif defined(TARGET_WAVESHARE_ESP32S3_AMOLED_18)
+#define WIGNET_HAS_AUDIO 1
+// I2C: touch (CST816, 0x15), ES8311 (0x18), the TCA9554 expander (0x20),
+// AXP2101 (0x34), PCF85063 (0x51), QMI8658 (0x6B). Pins and I2S from
+// Waveshare's examples/arduino-v2 (pin_config.h, 15_ES8311).
+#define WIGNET_I2C_SDA 15
+#define WIGNET_I2C_SCL 14
+// The 2" board's axes: the page followed all four turns on the bench
+// (2026-10-30), lying screen up reads z = -1 g.
+#define WIGNET_IMU_SCREEN_X_AXIS 0
+#define WIGNET_IMU_SCREEN_X_SIGN -1
+#define WIGNET_IMU_SCREEN_Y_AXIS 1
+#define WIGNET_IMU_SCREEN_Y_SIGN 1
+#define WIGNET_IMU_SCREEN_Z_SIGN -1
+#define WIGNET_I2S_MCLK 16
+#define WIGNET_I2S_BCLK 9
+#define WIGNET_I2S_LRCK 45
+#define WIGNET_I2S_DOUT 8
+#define WIGNET_AUDIO_PA 46
+// Mains, battery level and charging from the AXP2101 (power_hal.cpp), as on
+// the PhotoPainter. The codec's rail is not switched here.
+#define WIGNET_POWER_AXP2101 1
+// BOOT only: no user key, and PWR reaches the ESP32 through the expander
+// (EXIO4), not a GPIO. GPIO5 is a panel data line here.
+#define WIGNET_BUTTON_KEY -1
+#define WIGNET_BUTTON_PWR -1
 
 #elif defined(TARGET_WAVESHARE_ESP32S3_LCD_154)
 #define WIGNET_HAS_AUDIO 1
@@ -65,5 +94,7 @@
 
 #if defined(WIGNET_HAS_AUDIO)
 #define WIGNET_BUTTON_BOOT 0
+#if !defined(WIGNET_BUTTON_PWR)
 #define WIGNET_BUTTON_PWR 5
+#endif
 #endif

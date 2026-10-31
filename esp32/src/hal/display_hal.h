@@ -97,6 +97,15 @@ int turn();
 void lendPanel(bool lent);
 void pushRegion(const uint16_t *pixels, int x, int y, int w, int h, int pageTurn = 0);
 #endif
+
+#if defined(WIGNET_HAS_TOUCH)
+/**
+ * A finger on the touch panel (touch1): true while one touches it, with
+ * where, in the coordinates of a page laid out at `pageTurn` (as
+ * pushRegion() takes it), so a scene's objects can be hit-tested directly.
+ */
+bool touchAt(int &x, int &y, int pageTurn = 0);
+#endif
 #endif
 
 } // namespace DisplayHAL

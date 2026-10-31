@@ -1,15 +1,17 @@
 #include <Arduino.h>
 
 #include "power_hal.h"
+#include "board.h"
 
-#if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
+#if defined(WIGNET_POWER_AXP2101)
 
 #include <Wire.h>
 
 namespace {
 
 // AXP2101 registers (datasheet v1.0 register map; the same ones XPowersLib
-// uses). Checked against this frame with the bench `power` command.
+// uses). Checked against the PhotoPainter and the AMOLED 1.8" with the bench
+// `power` command.
 constexpr uint8_t PMIC_ADDRESS = 0x34;
 constexpr uint8_t STATUS_1 = 0x00;         // bit5 VBUS good, bit3 battery present
 constexpr uint8_t STATUS_2 = 0x01;         // bits6:5 battery current direction
@@ -21,7 +23,7 @@ constexpr uint8_t BATTERY_PERCENT = 0xA4;  // fuel gauge, 0-100
 constexpr uint8_t LDO_ENABLE = 0x90;       // bit2 ALDO3, the codec's rail (audio_hal.cpp)
 constexpr uint8_t ALDO3 = 0x04;
 
-bool readRegister(uint8_t reg, uint8_t &value) {
+bool readRegisterOnce(uint8_t reg, uint8_t &value) {
   Wire.beginTransmission(PMIC_ADDRESS);
   Wire.write(reg);
   if (Wire.endTransmission(false) != 0 ||
@@ -29,6 +31,12 @@ bool readRegister(uint8_t reg, uint8_t &value) {
     return false;
   value = Wire.read();
   return true;
+}
+
+// Twice: on the AMOLED 1.8" the bus also carries the touch and the IMU, and
+// about one read in 25 failed on the bench (2026-10-31).
+bool readRegister(uint8_t reg, uint8_t &value) {
+  return readRegisterOnce(reg, value) || readRegisterOnce(reg, value);
 }
 
 bool setBits(uint8_t reg, uint8_t bits) {
@@ -46,6 +54,7 @@ bool setBits(uint8_t reg, uint8_t bits) {
 namespace PowerHAL {
 
 void begin() {
+#if defined(WIGNET_AUDIO_RAIL_AXP2101)
   // ALDO3 as found at boot, before any sound switches it on (playTune,
   // toneRing): after a cold power-up (battery and USB out), the AXP2101's
   // own default. Whether that is on decides what leaving it on after a ring
@@ -53,6 +62,7 @@ void begin() {
   uint8_t ldo = 0;
   if (readRegister(LDO_ENABLE, ldo))
     Serial.printf("[Power] AXP2101 at boot: 90=%02X, ALDO3 (codec rail) %s\n", ldo, ldo & ALDO3 ? "on" : "off");
+#endif
   // Only set the bits this needs: the rest of these registers belongs to
   // the charger and the other ADCs, configured elsewhere.
   if (!setBits(ADC_ENABLE, 0x01) || !setBits(GAUGE_CONTROL, 0x08))
