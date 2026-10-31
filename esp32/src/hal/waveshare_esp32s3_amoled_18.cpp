@@ -348,7 +348,8 @@ void lendPanel(bool lent) { panelLent = lent; }
 // is written. A page laid out for how the board is held (pageTurn) is
 // turned into the frame first.
 void pushRegion(const uint16_t *pixels, int x, int y, int w, int h, int pageTurn) {
-  if (!panelLock || !panel || !panelBuffer || w <= 0 || h <= 0) return;
+  // Given back: a last refresh of the emptied scene would draw over the page.
+  if (!panelLent || !panelLock || !panel || !panelBuffer || w <= 0 || h <= 0) return;
   pageTurn = ((pageTurn % 360) + 360) % 360;
   const bool sidewaysPage = pageTurn == 90 || pageTurn == 270;
   const int sw = sidewaysPage ? FRAME_H : FRAME_W, sh = sidewaysPage ? FRAME_W : FRAME_H;
