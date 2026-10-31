@@ -315,7 +315,7 @@ Which boards can sense power, checked in the firmware on 2026-09-29:
 | --- | --- | --- |
 | `waveshare_photopainter_73e6` | Yes: AXP2101 VBUS status | Yes: AXP2101 voltage and fuel gauge (uncalibrated) |
 | `waveshare_esp32s3_lcd_154` | Partly, since 2026-10-19: charging (GPIO3 low) or a computer on its USB (`Serial.isPlugged()`); a wall charger with a full cell reads as battery. `stays_awake1` | Yes: voltage through a x3 divider on GPIO1, a percentage from a LiPo curve |
-| `waveshare_esp32s3_amoled_18` | Not yet: always awake (`WIGNET_ALWAYS_POWERED`, `stays_awake1`); its AXP2101 is not read | Not yet: the AXP2101 could give it |
+| `waveshare_esp32s3_amoled_18` | Yes: AXP2101 VBUS status (`WIGNET_POWER_AXP2101`); always awake whatever it says (`stays_awake1`) | Yes: AXP2101 voltage and fuel gauge, as the PhotoPainter; untested, no battery fitted on the bench board (2026-10-31) |
 | `firebeetle_75v2` (DFR0478) | Probably not | Maybe: a divider to an analog pin; check the board before relying on it |
 | `waveshare_driver_*`, `d1_mini_*` | No | No (a D1 mini could read A0 if the battery is wired to it) |
 
@@ -334,6 +334,11 @@ Which boards can sense power, checked in the firmware on 2026-09-29:
 - **PNGdec holds two rows** of at most `PNG_MAX_BUFFERED_PIXELS` bytes,
   320 px of RGBA by default: a wider colour screen raises it in its
   environment, or every PNG fails to decode and the 1-bit BMP is shown.
+- **LittleFS is never formatted by the firmware** (it would erase the alarm
+  WAV): a new board with audio needs `pio run -e <env> -t uploadfs` once,
+  from `esp32/data/` (the WAV, or empty: sounds then ring as a tone).
+  Until then the log says `File system is not mounted` and the list of
+  sounds is not kept.
 - **Mounting rotation** is set twice on a colour board:
   `getDefaultDisplayRotation()` for 1-bit drawing, `renderPackedColor()` in
   the HAL for WGN6.

@@ -14,8 +14,8 @@
  * 2026-10-30 on a board with MAC 90:70:69:fe:a4:08.
  *
  * Besides the screen: scenes (lendPanel, pushRegion) and the CST816 touch
- * (touchAt, touch1). Audio and the QMI8658 are board.h's. The AXP2101 is not
- * read yet. main.cpp draws its pages through GxEPD2 as on the other colour
+ * (touchAt, touch1). Audio, the QMI8658 and the AXP2101 (power_hal.cpp) are
+ * board.h's. main.cpp draws its pages through GxEPD2 as on the other colour
  * boards; the adapter below hands them to the upright frame.
  */
 

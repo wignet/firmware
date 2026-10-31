@@ -20,6 +20,8 @@
 #define WIGNET_AUDIO_PA 7
 // The codec's rail is the PMIC's ALDO3, switched on before each ring.
 #define WIGNET_AUDIO_RAIL_AXP2101 1
+// Mains, battery level and charging from the PMIC (power_hal.cpp).
+#define WIGNET_POWER_AXP2101 1
 #define WIGNET_BUTTON_KEY 4
 // PWR goes through the PMIC: high when pressed, and it pulses while the
 // amplifier plays (audio_hal.cpp, PWR_HOLD_MS).
@@ -59,6 +61,9 @@
 #define WIGNET_I2S_LRCK 45
 #define WIGNET_I2S_DOUT 8
 #define WIGNET_AUDIO_PA 46
+// Mains, battery level and charging from the AXP2101 (power_hal.cpp), as on
+// the PhotoPainter. The codec's rail is not switched here.
+#define WIGNET_POWER_AXP2101 1
 // BOOT only: no user key, and PWR reaches the ESP32 through the expander
 // (EXIO4), not a GPIO. GPIO5 is a panel data line here.
 #define WIGNET_BUTTON_KEY -1

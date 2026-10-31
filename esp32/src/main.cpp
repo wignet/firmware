@@ -19,7 +19,8 @@
 #include "usb_console.h"
 #include "board.h"
 
-#if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6) || defined(WIGNET_BATTERY_ADC_PIN)
+#if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6) || defined(WIGNET_BATTERY_ADC_PIN) || \
+    defined(WIGNET_POWER_AXP2101)
 #include "power_hal.h"
 #endif
 #if defined(WIGNET_OTA_CLIENT)
@@ -697,7 +698,7 @@ int fetchSchedule() {
 #endif
   url += ScenePlayer::scheduleParams();
 #endif
-#if defined(WIGNET_BATTERY_ADC_PIN)
+#if defined(WIGNET_BATTERY_ADC_PIN) || defined(WIGNET_POWER_AXP2101)
   // pwr=ext and, with a battery fitted, its level (power_hal.cpp).
   url += PowerHAL::queryParams();
 #elif defined(WIGNET_ALWAYS_POWERED)
@@ -2104,8 +2105,8 @@ void setup() {
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
   UsbAwakeHAL::begin();
   PowerHAL::begin(); // after AlarmClockHAL::begin() has started I2C
-#elif defined(WIGNET_BATTERY_ADC_PIN)
-  PowerHAL::begin(); // the battery ADC and charge pin
+#elif defined(WIGNET_BATTERY_ADC_PIN) || defined(WIGNET_POWER_AXP2101)
+  PowerHAL::begin(); // the battery ADC and charge pin, or the AXP2101
 #endif
 #if defined(WIGNET_HAS_AUDIO)
   AlarmClockHAL::ringIfDue(); // Cached occurrence can ring without Wi-Fi.
