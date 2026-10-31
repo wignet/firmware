@@ -193,7 +193,7 @@ void cue(const String &args) {
   unsigned presses = 0;
   while (AudioHAL::isPlaying()) {
     const bool bootNow = digitalRead(WIGNET_BUTTON_BOOT) == LOW;
-    const bool keyNow = digitalRead(WIGNET_BUTTON_KEY) == LOW;
+    const bool keyNow = WIGNET_BUTTON_KEY >= 0 && digitalRead(WIGNET_BUTTON_KEY) == LOW;
     if (bootNow && !boot) Serial.printf("[bench] BOOT pressed at %lu ms, still playing\n", millis() - startMs);
     if (keyNow && !key) Serial.printf("[bench] KEY pressed at %lu ms, still playing\n", millis() - startMs);
     presses += (bootNow && !boot) + (keyNow && !key);

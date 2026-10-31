@@ -64,7 +64,10 @@ including what was and was not validated on hardware.
     screen's turn holds still while a scene follows the tilt;
   - `pwr_short1` (a power button whose hold the firmware handles): a short
     press reaches the scene as `pwr.short`, the hold stays the board's;
-  - `touch1` (a touch screen): touches on objects.
+  - `touch1` (a touch screen, `WIGNET_HAS_TOUCH`): a finger down on an
+    object shown is `p<page>b<id>.down`, lifting it the matching `.up`, the
+    topmost object taking it. The HAL's `DisplayHAL::touchAt()` hands the
+    point in page coordinates (first on the AMOLED 1.8", CST816, 2026-10-31).
 
   It also says what it can hold and draw: `scene_3mb` (a bundle of up to
   3 MB in PSRAM; without it the server sends at most 1.5 MB) and `scene_i4`
@@ -312,7 +315,7 @@ Which boards can sense power, checked in the firmware on 2026-09-29:
 | --- | --- | --- |
 | `waveshare_photopainter_73e6` | Yes: AXP2101 VBUS status | Yes: AXP2101 voltage and fuel gauge (uncalibrated) |
 | `waveshare_esp32s3_lcd_154` | Partly, since 2026-10-19: charging (GPIO3 low) or a computer on its USB (`Serial.isPlugged()`); a wall charger with a full cell reads as battery. `stays_awake1` | Yes: voltage through a x3 divider on GPIO1, a percentage from a LiPo curve |
-| `waveshare_esp32s3_amoled_18` | Not yet: always awake (`WIGNET_ALWAYS_POWERED`); its AXP2101 is not read | Not yet: the AXP2101 could give it |
+| `waveshare_esp32s3_amoled_18` | Not yet: always awake (`WIGNET_ALWAYS_POWERED`, `stays_awake1`); its AXP2101 is not read | Not yet: the AXP2101 could give it |
 | `firebeetle_75v2` (DFR0478) | Probably not | Maybe: a divider to an analog pin; check the board before relying on it |
 | `waveshare_driver_*`, `d1_mini_*` | No | No (a D1 mini could read A0 if the battery is wired to it) |
 

@@ -48,6 +48,13 @@ constexpr int PWR_PRESSED = LOW;
 constexpr int PWR_MODE = INPUT_PULLUP;
 #endif
 
+// A board without KEY or a GPIO PWR (the AMOLED 1.8", board.h) gives -1:
+// never configured, never pressed. digitalRead(-1) would read LOW, pressed.
+void buttonMode(int pin, int mode) {
+  if (pin >= 0) pinMode(pin, mode);
+}
+bool buttonIs(int pin, int level) { return pin >= 0 && digitalRead(pin) == level; }
+
 // Alarm loudness while ringing: rises from silence to the alarm's volume over
 // the fade-in, then holds. Amplitude follows the square of elapsed progress
 // because loudness is not linear in amplitude: a straight amplitude ramp is
@@ -122,7 +129,7 @@ bool stopRequested() {
   }
   if (cueMode) return false;
   // Checked once per ~10 ms buffer: never blocks playback while PWR is held.
-  if (digitalRead(PWR_BUTTON) == PWR_PRESSED) {
+  if (buttonIs(PWR_BUTTON, PWR_PRESSED)) {
     const uint32_t now = millis();
     if (!pwrHigh) {
       pwrHigh = true;
@@ -138,12 +145,12 @@ bool stopRequested() {
     ++pwrPulses;
     pwrHigh = false;
   }
-  if (digitalRead(BOOT_BUTTON) != LOW && digitalRead(KEY_BUTTON) != LOW) {
+  if (!buttonIs(BOOT_BUTTON, LOW) && !buttonIs(KEY_BUTTON, LOW)) {
     return false;
   }
   delay(25); // Reject contact bounce and transient startup levels.
-  const bool boot = digitalRead(BOOT_BUTTON) == LOW;
-  const bool key = digitalRead(KEY_BUTTON) == LOW;
+  const bool boot = buttonIs(BOOT_BUTTON, LOW);
+  const bool key = buttonIs(KEY_BUTTON, LOW);
   if (boot || key) Serial.printf("[Audio] Stopped by %s\n", boot ? "BOOT" : "KEY");
   return boot || key;
 }
@@ -445,9 +452,9 @@ Mml::Synth tuneSynth;
 // Shared by the alarm and the USB test: `maxDurationSec` is already bounded.
 bool ring(const char *path, const char *tune, uint8_t volume,
           uint32_t maxDurationSec, uint32_t fadeInSec) {
-  pinMode(BOOT_BUTTON, INPUT_PULLUP);
-  pinMode(KEY_BUTTON, INPUT_PULLUP);
-  pinMode(PWR_BUTTON, PWR_MODE);
+  buttonMode(BOOT_BUTTON, INPUT_PULLUP);
+  buttonMode(KEY_BUTTON, INPUT_PULLUP);
+  buttonMode(PWR_BUTTON, PWR_MODE);
   fadeInSec = min(fadeInSec, 3600U);
   // The alarm's duration counts from full volume, so the fade-in never eats
   // into it: 600 s of fade-in and 600 s of duration ring for 20 minutes.
@@ -748,9 +755,9 @@ void stop() { stopFlag = true; }
 uint32_t watchSeconds = 0;
 
 void watchTask(void *) {
-  pinMode(BOOT_BUTTON, INPUT_PULLUP);
-  pinMode(KEY_BUTTON, INPUT_PULLUP);
-  pinMode(PWR_BUTTON, PWR_MODE);
+  buttonMode(BOOT_BUTTON, INPUT_PULLUP);
+  buttonMode(KEY_BUTTON, INPUT_PULLUP);
+  buttonMode(PWR_BUTTON, PWR_MODE);
   const int pins[3] = {BOOT_BUTTON, KEY_BUTTON, PWR_BUTTON};
   const char *names[3] = {"BOOT", "KEY", "PWR"};
   const int pressed[3] = {LOW, LOW, PWR_PRESSED};
@@ -758,7 +765,8 @@ void watchTask(void *) {
   uint32_t since[3];
   const uint32_t start = millis();
   for (int i = 0; i < 3; ++i) {
-    level[i] = digitalRead(pins[i]);
+    // An absent button reads as up throughout.
+    level[i] = pins[i] >= 0 ? digitalRead(pins[i]) : !pressed[i];
     since[i] = start;
   }
   Serial.printf("[bench] buttons: watching %lu s; now BOOT=%s KEY=%s PWR=%s\n",
@@ -769,6 +777,7 @@ void watchTask(void *) {
   while (millis() - start < watchSeconds * 1000UL) {
     const uint32_t now = millis();
     for (int i = 0; i < 3; ++i) {
+      if (pins[i] < 0) continue;
       const int read = digitalRead(pins[i]);
       if (read == level[i]) continue;
       ++changes;

@@ -13,9 +13,10 @@
  * 0x51 (PCF85063), 0x6B (QMI8658) and 0x7E (not identified), measured
  * 2026-10-30 on a board with MAC 90:70:69:fe:a4:08.
  *
- * Bring-up scope: the screen only. Touch, audio, IMU, battery and scenes are
- * not wired yet. main.cpp draws its pages through GxEPD2 as on the other
- * colour boards; the adapter below hands them to the upright frame.
+ * Besides the screen: scenes (lendPanel, pushRegion) and the CST816 touch
+ * (touchAt, touch1). Audio and the QMI8658 are board.h's. The AXP2101 is not
+ * read yet. main.cpp draws its pages through GxEPD2 as on the other colour
+ * boards; the adapter below hands them to the upright frame.
  */
 
 #define ENABLE_GxEPD2_GFX 1
@@ -39,6 +40,7 @@
 #define BOARD_I2C_SDA 15
 #define BOARD_I2C_SCL 14
 #define EXPANDER_ADDRESS 0x20
+#define TOUCH_ADDRESS 0x15 // CST816
 static constexpr int PANEL_W = 368, PANEL_H = 448;
 static constexpr int FRAME_W = 448, FRAME_H = 368;
 // Clockwise quarter turn from the frame to the panel, by how the panel sits.
@@ -82,18 +84,31 @@ static void releaseResets() {
 // ============ Frame to panel ============
 
 // Panel pixel (px, py) shows upright pixel (ux, uy): the inverse of a
-// clockwise turn `turn` of the upright frame.
-static inline void panelToUpright(int px, int py, int turn, int &ux, int &uy) {
+// clockwise turn `turn` of an upright sw x sh picture (the frame, or a page).
+static inline void panelToUpright(int px, int py, int turn, int sw, int sh, int &ux, int &uy) {
   switch (turn) {
-  case 90:  ux = py;                uy = FRAME_H - 1 - px; break;
-  case 180: ux = FRAME_W - 1 - px;  uy = FRAME_H - 1 - py; break;
-  case 270: ux = FRAME_W - 1 - py;  uy = px;               break;
-  default:  ux = px;                uy = py;               break;
+  case 90:  ux = py;          uy = sh - 1 - px; break;
+  case 180: ux = sw - 1 - px; uy = sh - 1 - py; break;
+  case 270: ux = sw - 1 - py; uy = px;          break;
+  default:  ux = px;          uy = py;          break;
   }
 }
 
+static inline void panelToUpright(int px, int py, int turn, int &ux, int &uy) {
+  panelToUpright(px, py, turn, FRAME_W, FRAME_H, ux, uy);
+}
+
+#if defined(WIGNET_SCENES)
+// While a scene plays (scene_player.cpp), the panel is LVGL's: the loop keeps
+// decoding pages into the upright frame, but nothing it draws is sent.
+static volatile bool panelLent = false;
+#endif
+
 static void pushFrame() {
   if (!uprightFrame || !panelBuffer || !panelLock || !panel) return;
+#if defined(WIGNET_SCENES)
+  if (panelLent) return;
+#endif
   xSemaphoreTakeRecursive(panelLock, portMAX_DELAY);
   const int turn = (MOUNT_TURN + currentTurn) % 360;
   for (int py = 0; py < PANEL_H; py++) {
@@ -324,5 +339,76 @@ void setTurn(int degrees) {
 }
 
 int turn() { return currentTurn; }
+
+#if defined(WIGNET_SCENES)
+void lendPanel(bool lent) { panelLent = lent; }
+
+// The same way to the panel as showFrame(): turned by MOUNT_TURN, through
+// writePixels(). Only the panel window that the upright rectangle lands on
+// is written. A page laid out for how the board is held (pageTurn) is
+// turned into the frame first.
+void pushRegion(const uint16_t *pixels, int x, int y, int w, int h, int pageTurn) {
+  if (!panelLock || !panel || !panelBuffer || w <= 0 || h <= 0) return;
+  pageTurn = ((pageTurn % 360) + 360) % 360;
+  const bool sidewaysPage = pageTurn == 90 || pageTurn == 270;
+  const int sw = sidewaysPage ? FRAME_H : FRAME_W, sh = sidewaysPage ? FRAME_W : FRAME_H;
+  const int turn = (MOUNT_TURN + currentTurn + pageTurn) % 360;
+  // Where the rectangle's corners land on the panel (the forward turn).
+  int px0, py0;
+  switch (turn) {
+  case 90:  px0 = sh - y - h; py0 = x;          break;
+  case 180: px0 = sw - x - w; py0 = sh - y - h; break;
+  case 270: px0 = y;          py0 = sw - x - w; break;
+  default:  px0 = x;          py0 = y;          break;
+  }
+  const bool sideways = turn == 90 || turn == 270;
+  const int pw = sideways ? h : w, ph = sideways ? w : h;
+  xSemaphoreTakeRecursive(panelLock, portMAX_DELAY);
+  uint16_t *out = panelBuffer;
+  for (int py = py0; py < py0 + ph; py++) {
+    for (int px = px0; px < px0 + pw; px++) {
+      int ux, uy;
+      panelToUpright(px, py, turn, sw, sh, ux, uy);
+      *out++ = pixels[(uy - y) * w + (ux - x)]; // native order, as LVGL's
+    }
+  }
+  panel->startWrite();
+  panel->writeAddrWindow(px0, py0, pw, ph);
+  bus->writePixels(panelBuffer, pw * ph);
+  panel->endWrite();
+  if (!brightnessOn) {
+    panel->setBrightness(255);
+    brightnessOn = true;
+  }
+  xSemaphoreGiveRecursive(panelLock);
+}
+#endif
+
+#if defined(WIGNET_HAS_TOUCH)
+// CST816: from register 0x02, the number of fingers, then x and y on 12 bits
+// each (high nibble first), in the panel's own portrait coordinates. Asleep
+// between touches it does not answer: no finger.
+bool touchAt(int &x, int &y, int pageTurn) {
+  Wire.beginTransmission(TOUCH_ADDRESS);
+  Wire.write(0x02);
+  if (Wire.endTransmission(false) != 0) return false;
+  uint8_t data[5];
+  if (Wire.requestFrom(TOUCH_ADDRESS, 5) != 5) return false;
+  for (uint8_t &byte : data) byte = Wire.read();
+  if ((data[0] & 0x0F) == 0) return false;
+  const int px = ((data[1] & 0x0F) << 8) | data[2];
+  const int py = ((data[3] & 0x0F) << 8) | data[4];
+  if (px >= PANEL_W || py >= PANEL_H) {
+    Serial.printf("[Touch] Off the panel: %d,%d\n", px, py);
+    return false;
+  }
+  // Back from the panel to the page, the way pushRegion() goes forward.
+  pageTurn = ((pageTurn % 360) + 360) % 360;
+  const bool sidewaysPage = pageTurn == 90 || pageTurn == 270;
+  const int sw = sidewaysPage ? FRAME_H : FRAME_W, sh = sidewaysPage ? FRAME_W : FRAME_H;
+  panelToUpright(px, py, (MOUNT_TURN + currentTurn + pageTurn) % 360, sw, sh, x, y);
+  return true;
+}
+#endif
 
 } // namespace DisplayHAL

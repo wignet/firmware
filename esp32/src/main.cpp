@@ -687,6 +687,10 @@ int fetchSchedule() {
   // motion1: tilt values and tilt/shake/face_down events (OrientationHAL::gravity).
   url += "%2Cmotion1";
 #endif
+#if defined(WIGNET_HAS_TOUCH)
+  // touch1: a finger on an object is p<page>b<id>.down|up (DisplayHAL::touchAt).
+  url += "%2Ctouch1";
+#endif
 #if defined(WIGNET_POWER_HOLD_PIN)
   // pwr_short1: a short press of PWR is the scene's (PowerHoldHAL::takeShortPress).
   url += "%2Cpwr_short1";
