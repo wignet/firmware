@@ -684,6 +684,11 @@ int fetchSchedule() {
   // scene_3mb: a bundle of up to 3 MB held raw (scene_player.cpp
   // BUNDLE_MAX_BYTES); without it the server keeps scenes to 1.5 MB.
   url += "%2Cscene_3mb";
+#if defined(WIGNET_POWER_AXP2101) || defined(WIGNET_BATTERY_ADC_PIN)
+  // scene_battery1: battery.percent, .charging, .plugged, .known in a
+  // scene's expressions (PowerHAL::read, scene_player.cpp tickScene).
+  url += "%2Cscene_battery1";
+#endif
 #if defined(WIGNET_HAS_IMU)
   // motion1: tilt values and tilt/shake/face_down events (OrientationHAL::gravity).
   url += "%2Cmotion1";

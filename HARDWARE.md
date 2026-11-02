@@ -71,7 +71,11 @@ including what was and was not validated on hardware.
 
   It also says what it can hold and draw: `scene_3mb` (a bundle of up to
   3 MB in PSRAM; without it the server sends at most 1.5 MB) and `scene_i4`
-  (I4 pictures, `docs/scene_runtime.md` "Indexed pictures").
+  (I4 pictures, `docs/scene_runtime.md` "Indexed pictures"). A board that
+  reads its battery (`PowerHAL`: an AXP2101 or a battery ADC pin) declares
+  `scene_battery1`, and the player gives its scenes `battery.percent`,
+  `.charging`, `.plugged` and `.known`, read every 10 s
+  (`Runtime::setBattery`).
 
   **A new kind of scene is not a new token.** It is expressed with the
   runtime (variables, bindings, guards, `every:`, `when:`) or becomes a

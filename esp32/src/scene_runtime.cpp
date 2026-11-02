@@ -19,8 +19,9 @@ enum Code : uint8_t {
   NUM, VAR, LIST, SRC, ADD, SUB, MUL, DIV, MOD, LT, LE, GT, GE, EQ, NE, AND, OR, NOT, NEG, COND,
   MIN, MAX, CLAMP, FLOOR, ROUND, ABS, LERP, BLEND, LEN, IDX, RAND
 };
-// Sources, as SRC's arg: time.h, m, s, known, tilt.x, y, z, page.
-const char SOURCES[] = "hmskxyzp";
+// Sources, as SRC's arg: time.h, m, s, known, tilt.x, y, z, page,
+// battery.percent, charging, plugged, known.
+const char SOURCES[] = "hmskxyzpbcun";
 const struct {
   const char *name;
   Code code;
@@ -30,8 +31,8 @@ const struct {
            {"lerp", LERP}, {"blend", BLEND}, {"len", LEN}, {"idx", IDX}, {"rand", RAND}};
 const char *PROPS[PROP_COUNT] = {"dx", "dy", "frame", "rotation", "visible", "opacity", "w", "h", "color", "pitch", "on"};
 
-// What a program reads: variables in bits 0-15, then time, tilt, page.
-constexpr uint32_t TIME = 1u << 16, TILT = 1u << 17, PAGE = 1u << 18;
+// What a program reads: variables in bits 0-15, then time, tilt, page, battery.
+constexpr uint32_t TIME = 1u << 16, TILT = 1u << 17, PAGE = 1u << 18, BATTERY = 1u << 19;
 constexpr int VARS_MAX = 16, STACK = 64, WHEN_DEPTH = 8;
 
 enum Verb : uint8_t { SET, PAGE_TO, REPORT, END, STATE, MOVE, WANDER, SHOW, HIDE, SOUND };
@@ -57,7 +58,7 @@ bool parseProgram(JsonArrayConst list, Program &out, uint32_t &deps, std::string
       } else if (text[0] == '@' && text[1] && !text[2] && strchr(SOURCES, text[1])) {
         op.code = SRC;
         op.arg = static_cast<int16_t>(strchr(SOURCES, text[1]) - SOURCES);
-        deps |= op.arg < 4 ? TIME : op.arg < 7 ? TILT : PAGE;
+        deps |= op.arg < 4 ? TIME : op.arg < 7 ? TILT : op.arg < 8 ? PAGE : BATTERY;
       } else {
         bool known = false;
         for (const auto &named : OPS)
@@ -213,6 +214,8 @@ bool Runtime::load(JsonObjectConst manifest, std::string &error) {
       }
       entry.actions.push_back(action);
     }
+    // A battery value anywhere, a guard or a set too: the host reads it.
+    readsBattery_ |= ((unused | entry.condDeps) & BATTERY) != 0;
     entries_.push_back(entry);
   }
   // Timers, by event, in the order the events first appear.
@@ -229,7 +232,10 @@ bool Runtime::load(JsonObjectConst manifest, std::string &error) {
     else if (entry.event.rfind("every:", 0) == 0) every_.push_back(timer);
     else if (entry.event.rfind("idle:", 0) == 0) idle_.push_back(timer);
   }
-  for (const Binding &binding : bindings_) readsTilt_ |= (binding.deps & TILT) != 0;
+  for (const Binding &binding : bindings_) {
+    readsTilt_ |= (binding.deps & TILT) != 0;
+    readsBattery_ |= (binding.deps & BATTERY) != 0;
+  }
   for (const Entry &entry : entries_) readsTilt_ |= (entry.condDeps & TILT) != 0;
   whenState_.assign(entries_.size(), false);
   return true;
@@ -254,6 +260,7 @@ int64_t Runtime::local() const {
 }
 
 float Runtime::source(int which) const {
+  if (which >= 8) return battery_[which - 8];
   if (which == 7) return static_cast<float>(page_);
   if (which >= 4) return tilt_[which - 4];
   if (!clockKnown_) return 0;
@@ -534,6 +541,16 @@ void Runtime::setTilt(float x, float y, float z, uint32_t now) {
   tilt_[1] = y;
   tilt_[2] = z;
   settle(TILT);
+}
+
+void Runtime::setBattery(int percent, int charging, bool plugged, uint32_t now) {
+  now_ = now;
+  const bool known = percent >= 0;
+  const float battery[4] = {known ? static_cast<float>(percent < 100 ? percent : 100) : 0.0f,
+                            charging > 0 ? 1.0f : 0.0f, plugged ? 1.0f : 0.0f, known ? 1.0f : 0.0f};
+  if (!memcmp(battery, battery_, sizeof(battery_))) return;
+  memcpy(battery_, battery, sizeof(battery_));
+  settle(BATTERY);
 }
 
 void Runtime::dispatch(const std::string &event, bool input, uint32_t now) {
