@@ -18,6 +18,7 @@
 #include "config.h"
 #include "hal/display_hal.h"
 #include "orientation_hal.h"
+#include "power_hal.h"
 #include "power_hold_hal.h"
 #include "scene_runtime.h"
 #if defined(WIGNET_HAS_AUDIO)
@@ -148,6 +149,8 @@ struct Scene {
   std::map<std::string, Sound> sounds;
   Tone tone;
   bool followsTilt = false; // a binding or a when reads it, or a motion event: read the tilt
+  uint32_t batteryReadAt = 0; // battery.*: read every BATTERY_READ_MS, at once when it starts
+  bool batteryRead = false;
   std::map<std::string, std::unique_ptr<Asset>> assets;
   std::vector<Page> pages;
   std::vector<std::unique_ptr<Obj>> objects;
@@ -660,10 +663,20 @@ void dispatch(const std::string &event, bool input) {
   scene->runtime.dispatch(event, input, millis());
 }
 
+// battery.* (scene_battery1): a level changes slowly, and the AXP2101 shares
+// its I2C bus with the IMU and the touch.
+constexpr uint32_t BATTERY_READ_MS = 10000;
+
 void tickScene(lv_timer_t *) {
   if (!scene || stopReason.length()) return;
   const uint32_t now = millis();
   scene->runtime.tick(now);
+  if (scene->runtime.readsBattery() && (!scene->batteryRead || now - scene->batteryReadAt >= BATTERY_READ_MS)) {
+    scene->batteryRead = true;
+    scene->batteryReadAt = now;
+    const PowerHAL::Report power = PowerHAL::read();
+    if (power.valid) scene->runtime.setBattery(power.batteryPercent, power.charging, power.external, now);
+  }
   if (scene->followsTilt) {
     const Tilt tilt = readTilt();
     if (tilt.known) {

@@ -103,9 +103,13 @@ public:
   void tick(uint32_t now);
   void setClock(uint32_t epoch, int32_t offset, uint32_t now);
   void setTilt(float x, float y, float z, uint32_t now);
+  // What the board reads: percent 0-100 or -1 unknown (no battery), charging
+  // 1, 0 or -1 unknown, plugged on USB or a charger.
+  void setBattery(int percent, int charging, bool plugged, uint32_t now);
   void dispatch(const std::string &event, bool input, uint32_t now);
 
   bool readsTilt() const { return readsTilt_; }
+  bool readsBattery() const { return readsBattery_; }
   bool ended() const { return ended_; }
   int page() const { return page_; }
   // An entry for `event` on the page shown (or every page).
@@ -140,12 +144,13 @@ private:
   std::vector<bool> whenState_;
   std::vector<Timer> after_, every_, idle_;
   uint32_t rng_ = 1;
-  bool slide_ = false, ended_ = false, readsTilt_ = false;
+  bool slide_ = false, ended_ = false, readsTilt_ = false, readsBattery_ = false;
   bool clockKnown_ = false;
   uint32_t epoch_ = 0, clockAt_ = 0, now_ = 0, lastInput_ = 0;
   int32_t offset_ = 0;
   int64_t second_ = -1;
   float tilt_[3] = {0, 0, 1};
+  float battery_[4] = {0, 0, 0, 0}; // percent, charging, plugged, known
 };
 
 } // namespace SceneRuntime
