@@ -1,18 +1,21 @@
 # Install the ready-to-flash firmware
 
-Download the image for your board (both screens are 800 × 480):
+Download the image for your board:
 
 | Board and panel | File | esptool chip |
 | --- | --- | --- |
 | Waveshare ESP32 Driver Board + 7.5-inch V2 black-and-white | `wignet-waveshare_driver_75v2-factory.bin` | `esp32` |
 | Waveshare ESP32-S3 PhotoPainter Rev2.0 + 7.3-inch Spectra 6 | `wignet-waveshare_photopainter_73e6-factory.bin` | `esp32s3` |
+| Waveshare ESP32-S3-Touch-AMOLED-1.8 | `wignet-waveshare_esp32s3_amoled_18-factory.bin` | `esp32s3` |
 
-These images are not for a FireBeetle, an ESP8266 or an ESP32-S3 LCD.
+These images are not interchangeable. In particular, the AMOLED image is not
+for an ESP32-S3 LCD, FireBeetle or ESP8266.
 
 Get the image and its matching `wignet-<environment>-SHA256SUMS` from the
 [release for your board](https://github.com/wignet/firmware/releases). Driver
 Board releases use `driver-75v2/v…`; PhotoPainter releases use
-`photopainter-73e6/v…`. Do not use another board's release.
+`photopainter-73e6/v…`; AMOLED first-install releases use `amoled-18/v…`.
+Do not use another board's release.
 Each image contains the bootloader, partition table and application. The
 PhotoPainter image also initializes an empty LittleFS partition for sounds
 and tunes; it includes no sounds or settings from a configured frame.
@@ -32,8 +35,8 @@ on Linux, `shasum -a 256 -c wignet-<environment>-SHA256SUMS` on macOS).
 Replace `<environment>` with your board's target name, such as
 `waveshare_photopainter_73e6`. On Windows, compare
 `Get-FileHash .\wignet-waveshare_driver_75v2-factory.bin -Algorithm SHA256`
-with the value in the matching checksum file (use the PhotoPainter filename
-for that board). The release also includes `SHA256SUMS` covering every image.
+with the value in the matching checksum file, using that board's filename.
+The release also includes `SHA256SUMS` covering every image.
 
 `wignet-<environment>-app.bin` is the application alone: the Wignet server
 installs it over the air on a frame that already runs this firmware (on the
@@ -51,6 +54,17 @@ For the **PhotoPainter Spectra 6**:
 ```sh
 python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0 wignet-waveshare_photopainter_73e6-factory.bin
 ```
+
+For the AMOLED, use its matching filename:
+
+```sh
+python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0 wignet-waveshare_esp32s3_amoled_18-factory.bin
+```
+
+The AMOLED is a 368 × 448 portrait panel; its firmware draws a 448 × 368
+landscape buffer. The first-install image resets stored Wi-Fi and local
+settings. It is a USB-only release image; over-the-air updates are not enabled
+for this board.
 
 This **first-install image resets stored Wi-Fi and local settings**: the
 merged file fills the space between the boot images with erased bytes. It
@@ -107,6 +121,7 @@ On a clean checkout, copy `esp32/src/config.h.example` to `config.h`, then:
 cd esp32
 pio run -e waveshare_driver_75v2 -t release
 pio run -e waveshare_photopainter_73e6 -t release
+pio run -e waveshare_esp32s3_amoled_18 -t release
 ```
 
 The image, checksum, source-commit record (`wignet-<environment>-BUILD.json`)
@@ -117,8 +132,9 @@ offsets and esptool's `merge_bin`.
 
 The GitHub workflow builds only ESP32 targets affected by a pull request. A
 release tag names one target and version: `driver-75v2/v0.5.0`,
-`photopainter-73e6/v0.5.0`, or `tv-pi0w/v1.0.0`. It builds and attaches only
-that target's images. A tag with no target build-input changes since the last
+`photopainter-73e6/v0.5.0`, `amoled-18/v0.1.0`, or `tv-pi0w/v1.0.0`. It builds and attaches only
+that target's images. The AMOLED release is for USB first installation; that
+board does not support OTA yet. A tag with no target build-input changes since the last
 release for that target is refused. The TV build runs only for its own tag or
 when its inputs change in a pull request. A tag creates a **draft** release,
 whose notes are `docs/changelog/<tag>.md` plus a link to this guide; a tag

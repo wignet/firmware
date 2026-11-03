@@ -297,6 +297,19 @@ void applyLayout(Scene &s, const Layout &layout, int turn) {
 
 // ---------------------------------------------------------------- display --
 
+#if defined(WIGNET_PANEL_EVEN_AREAS)
+// Every area LVGL redraws, and every stripe of a partial refresh, from an
+// even column and row to an odd one (board.h). The page's sides are even, so
+// it stays even on the panel whichever way the board is turned.
+void evenArea(lv_event_t *event) {
+  lv_area_t *area = lv_event_get_invalidated_area(event);
+  area->x1 &= ~1;
+  area->y1 &= ~1;
+  area->x2 |= 1;
+  area->y2 |= 1;
+}
+#endif
+
 void flush(lv_display_t *display, const lv_area_t *area, uint8_t *pixels) {
   DisplayHAL::pushRegion(reinterpret_cast<const uint16_t *>(pixels), area->x1, area->y1,
                          lv_area_get_width(area), lv_area_get_height(area), pageTurn);
@@ -1283,6 +1296,9 @@ void begin() {
   }
   lv_display_set_buffers(display, buf1, buf2, bufferBytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
   lv_display_set_flush_cb(display, flush);
+#if defined(WIGNET_PANEL_EVEN_AREAS)
+  lv_display_add_event_cb(display, evenArea, LV_EVENT_INVALIDATE_AREA, nullptr);
+#endif
 #if defined(WIGNET_DRAW_TIMING)
   lv_display_add_event_cb(display, onRefresh, LV_EVENT_REFR_START, nullptr);
   lv_display_add_event_cb(display, onRefresh, LV_EVENT_REFR_READY, nullptr);

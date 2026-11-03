@@ -21,6 +21,11 @@ TARGETS = {
         "hal": "esp32/src/hal/waveshare_photopainter_73e6.cpp",
         "partitions": set(),
     },
+    "amoled-18": {
+        "environment": "waveshare_esp32s3_amoled_18",
+        "hal": "esp32/src/hal/waveshare_esp32s3_amoled_18.cpp",
+        "partitions": set(),
+    },
     "tv-pi0w": {"environment": None, "hal": None, "partitions": set()},
 }
 

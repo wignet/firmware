@@ -30,6 +30,10 @@ jobs:
           - environment: waveshare_photopainter_73e6
             ota: true
             release_target: photopainter-73e6
+          # First-install image only until the AMOLED has an OTA bench.
+          - environment: waveshare_esp32s3_amoled_18
+            ota: false
+            release_target: amoled-18
     steps:
       - uses: actions/checkout@v4
         with:
@@ -217,6 +221,7 @@ jobs:
           case "$target" in
             driver-75v2) expected="wignet-waveshare_driver_75v2-app.bin"; prefix="wignet-waveshare_driver_75v2-" ;;
             photopainter-73e6) expected="wignet-waveshare_photopainter_73e6-app.bin"; prefix="wignet-waveshare_photopainter_73e6-" ;;
+            amoled-18) expected="wignet-waveshare_esp32s3_amoled_18-factory.bin"; prefix="wignet-waveshare_esp32s3_amoled_18-" ;;
             tv-pi0w) expected="wignet-raspberry_pi_hdmi-rootfs.ext4.xz"; prefix="wignet-raspberry_pi_hdmi-" ;;
             *) echo "::error::unknown release target in $RELEASE_TAG"; exit 1 ;;
           esac
