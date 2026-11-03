@@ -1606,19 +1606,32 @@ static void lcdBootScreen() {
 }
 
 // Laid out for 240 px of height: a taller page (portrait) puts the header
-// and footer at its edges and centres the rest.
+// and footer at its edges and centres the rest. A page wide enough (the
+// AMOLED's 448 or 368 px) keeps each sentence on one line, as e-paper does.
 static void lcdProvisioningScreen(const String &apName) {
   lcdScreen = LcdScreen::Provisioning;
   lcdApName = apName;
   LcdFrame gfx;
   const int middle = (gfx.height() - 240) / 2;
+  int16_t bx, by;
+  uint16_t bw, bh;
+  gfx.setFont(&FreeSans12pt7b);
+  gfx.setTextSize(1);
+  gfx.getTextBounds("Connect to the Wi-Fi network", 0, 0, &bx, &by, &bw, &bh);
+  const bool wide = bx + bw <= gfx.width() - 2 * LCD_MARGIN;
   gfx.fillScreen(LCD_BACKGROUND);
   lcdSmall(gfx, 28, "WIGNET  WI-FI SETUP");
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 74, "Connect to the");
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 100, "Wi-Fi network");
-  lcdLine(gfx, &FreeSansBold12pt7b, LCD_TEXT, middle + 140, apName);
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 178, "to set up");
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 204, "this Wignet");
+  if (wide) {
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 100, "Connect to the Wi-Fi network");
+    lcdLine(gfx, &FreeSansBold12pt7b, LCD_TEXT, middle + 140, apName);
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 178, "to set up this Wignet");
+  } else {
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 74, "Connect to the");
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 100, "Wi-Fi network");
+    lcdLine(gfx, &FreeSansBold12pt7b, LCD_TEXT, middle + 140, apName);
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 178, "to set up");
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 204, "this Wignet");
+  }
   lcdSmall(gfx, gfx.height() - 12, "MAC " + WiFi.macAddress());
   DisplayHAL::showFrame();
 }
