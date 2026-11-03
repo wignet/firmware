@@ -177,3 +177,33 @@ Every case above, network faults and built-in ones, passed on SideWig3
 (`90:70:69:fe:4d:54`) on 2026-11-03: counters 1 to 17, driven by a script
 that ran one case after another against the serial console and the server.
 The loop stack kept at least 9,672 of its 16 KB during a download.
+
+## The 2" LCD
+
+The ESP32-S3-LCD-2 passed the same gate before its production build declared
+`ota1`. Its bench build is `[env:waveshare_esp32s3_lcd_2_ota1_bench]`, served
+by `bench/` and the commands above as they are. Its table
+(`default_16MB.csv`) is the AMOLED's: two 6.25 MiB app slots, no migration,
+`-t upload` keeps Wi-Fi.
+
+What differs from the PhotoPainter:
+
+- **Wrong board**: `wrong_hw` used to name `waveshare_esp32s3_lcd_2` as the
+  other board, which on this board is its own: the offer was valid and
+  installed. The bench server now names the first board in `OTHER_HWS` that
+  is not the polling one.
+- **Wrong chip**: offer the 7.5 V2 build (an ESP32 image):
+  `ota=failed:<id>:chip`.
+- **Power**: no battery fitted and no way to measure it
+  (`PowerHAL::available()` is false), as on the 7.5 V2: the signed
+  `powerSource` decides, so the owner states it plugged in
+  (`set_power_source`) or forces the update.
+- **Download**: 1.37 MB; from the request to the new image's first poll took
+  29 s over Wi-Fi.
+
+Every case above, network faults and built-in ones, passed on SideWig2
+(`b8:1f:3f:c8:1d:84`) on 2026-11-03: counters 1 to 18, driven by a script
+that ran one case after another against the serial console and the server.
+`hang_pending` restarted the board 10 min after it booted the image, and the
+previous one reported `rolledback`. The loop stack kept at least 9,700 of its
+16 KB during a download.

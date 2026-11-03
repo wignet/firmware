@@ -2,8 +2,9 @@
 """A local OTA server for the bench (docs/ota_bench.md).
 
 It speaks the contract of wignet's docs/ota.md to a bench build of the
-PhotoPainter (env waveshare_photopainter_73e6_ota1_bench) or the 7.5 V2
-(waveshare_driver_75v2_ota1_bench): a minimal /schedule
+PhotoPainter (env waveshare_photopainter_73e6_ota1_bench), the 7.5 V2
+(waveshare_driver_75v2_ota1_bench), the AMOLED 1.8 or the 2" LCD
+(waveshare_esp32s3_amoled_18_ota1_bench, waveshare_esp32s3_lcd_2_ota1_bench): a minimal /schedule
 over HTTP that offers one image and confirms it, and /firmware/<sha256>.bin
 over HTTPS. Each run can inject one fault, to check that the board refuses,
 reports or rolls back as the contract says.
@@ -43,8 +44,9 @@ BENCH = pathlib.Path(__file__).resolve().parent / "bench"
 OFFER_DOMAIN = "wignet-ota1"
 CONFIRM_DOMAIN = "wignet-ota-confirm1"
 # Offers and confirmations are signed for the board that polls (its hw=):
-# one bench serves the PhotoPainter and the 7.5 V2. wrong_hw names this one.
-OTHER_HW = "waveshare_esp32s3_lcd_2"
+# one bench serves every OTA board. wrong_hw names another one: the first of
+# these that is not the polling board (the 2" LCD is itself on the bench).
+OTHER_HWS = ("waveshare_esp32s3_lcd_2", "waveshare_photopainter_73e6")
 # One fault per run. Each says what the board should do (docs/ota.md).
 FAULTS = {
     "none": "valid offer and confirmation: installs, then confirmed:<id>",
@@ -200,7 +202,8 @@ class Bench:
         if self.fault == "wrong_hash":
             sha = hashlib.sha256(self.image + b"bench").hexdigest()
         size = len(self.image) + (16 if self.fault == "wrong_size" else 0)
-        hw = OTHER_HW if self.fault == "wrong_hw" else hw
+        if self.fault == "wrong_hw":
+            hw = next(other for other in OTHER_HWS if other != hw)
         expires = int(time.time()) + (-3600 if self.fault == "expired" else 86400)
         if self.fault == "stale_nonce":
             nonce = self.previous_nonce or secrets.token_hex(16)
