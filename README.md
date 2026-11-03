@@ -10,11 +10,11 @@ the GPL-3.0.
 
 ## Get a working Wignet
 
-**Waveshare ESP32 Driver Board + 7.5-inch V2, or PhotoPainter 7.3-inch Spectra 6:** use the
-[ready-to-flash download](https://github.com/wignet/firmware/releases/latest)
+**Waveshare ESP32 Driver Board + 7.5-inch V2, PhotoPainter 7.3-inch Spectra 6, or AMOLED 1.8:** use the
+[ready-to-flash downloads](https://github.com/wignet/firmware/releases)
 and follow [the USB installation guide](docs/flashing.md). No PlatformIO or
-compilation is needed. Choose the file matching your board. Downloads for other boards will follow hardware
-validation.
+compilation is needed. Choose the file matching your board. The AMOLED image
+installs once over USB; later releases come over the air.
 
 To build from source:
 
