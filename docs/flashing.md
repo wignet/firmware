@@ -7,14 +7,17 @@ Download the image for your board:
 | Waveshare ESP32 Driver Board + 7.5-inch V2 black-and-white | `wignet-waveshare_driver_75v2-factory.bin` | `esp32` |
 | Waveshare ESP32-S3 PhotoPainter Rev2.0 + 7.3-inch Spectra 6 | `wignet-waveshare_photopainter_73e6-factory.bin` | `esp32s3` |
 | Waveshare ESP32-S3-Touch-AMOLED-1.8 | `wignet-waveshare_esp32s3_amoled_18-factory.bin` | `esp32s3` |
+| Waveshare ESP32-S3-LCD-2 | `wignet-waveshare_esp32s3_lcd_2-factory.bin` | `esp32s3` |
 
 These images are not interchangeable. In particular, the AMOLED image is not
-for an ESP32-S3 LCD, FireBeetle or ESP8266.
+for an ESP32-S3 LCD, and the LCD 2 image is not for the 1.54-inch LCD, a
+FireBeetle or an ESP8266.
 
 Get the image and its matching `wignet-<environment>-SHA256SUMS` from the
 [release for your board](https://github.com/wignet/firmware/releases). Driver
 Board releases use `driver-75v2/v…`; PhotoPainter releases use
-`photopainter-73e6/v…`; AMOLED first-install releases use `amoled-18/v…`.
+`photopainter-73e6/v…`; AMOLED releases use `amoled-18/v…`; LCD 2 releases
+use `lcd-2/v…`.
 Do not use another board's release.
 Each image contains the bootloader, partition table and application. The
 PhotoPainter image also initializes an empty LittleFS partition for sounds
@@ -65,6 +68,14 @@ The AMOLED is a 368 × 448 portrait panel; its firmware draws a 448 × 368
 landscape buffer. The first-install image resets stored Wi-Fi and local
 settings. After it, the board installs later releases over the air, as the
 PhotoPainter does.
+
+For the LCD 2:
+
+```sh
+python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0 wignet-waveshare_esp32s3_lcd_2-factory.bin
+```
+
+The same applies: one USB install, then updates over the air.
 
 This **first-install image resets stored Wi-Fi and local settings**: the
 merged file fills the space between the boot images with erased bytes. It
@@ -122,6 +133,7 @@ cd esp32
 pio run -e waveshare_driver_75v2 -t release
 pio run -e waveshare_photopainter_73e6 -t release
 pio run -e waveshare_esp32s3_amoled_18 -t release
+pio run -e waveshare_esp32s3_lcd_2 -t release
 ```
 
 The image, checksum, source-commit record (`wignet-<environment>-BUILD.json`)
@@ -132,9 +144,9 @@ offsets and esptool's `merge_bin`.
 
 The GitHub workflow builds only ESP32 targets affected by a pull request. A
 release tag names one target and version: `driver-75v2/v0.5.0`,
-`photopainter-73e6/v0.5.0`, `amoled-18/v0.1.0`, or `tv-pi0w/v1.0.0`. It builds and attaches only
-that target's images. An AMOLED release carries its first-install image and the
-image the server installs over the air. A tag with no target build-input changes since the last
+`photopainter-73e6/v0.5.0`, `amoled-18/v0.1.0`, `lcd-2/v0.1.0`, or `tv-pi0w/v1.0.0`. It builds and attaches only
+that target's images. An AMOLED or LCD 2 release carries its first-install
+image and the image the server installs over the air. A tag with no target build-input changes since the last
 release for that target is refused. The TV build runs only for its own tag or
 when its inputs change in a pull request. A tag creates a **draft** release,
 whose notes are `docs/changelog/<tag>.md` plus a link to this guide; a tag
