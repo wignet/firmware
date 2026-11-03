@@ -651,6 +651,11 @@ int fetchSchedule() {
   // welcome_local1: draws the Welcome page itself from /schedule `welcome`
   // (the owner page's address and QR modules), crisp at its own size.
   url += "%2Cwelcome_local1";
+#if defined(WIGNET_CORNER_RADIUS)
+  // screen_corner1: cr= below is the radius of the panel's corners, in
+  // buffer pixels; the platform tells agents what they hide.
+  url += "%2Cscreen_corner1";
+#endif
 #if defined(WIGNET_SELF_ORIENT)
   // self_orient1: the accelerometer turns the upright page itself (square
   // panels only); ori= is the turn applied now, for the owner's page.
@@ -702,6 +707,9 @@ int fetchSchedule() {
   url += "%2Cpwr_short1";
 #endif
   url += ScenePlayer::scheduleParams();
+#endif
+#if defined(WIGNET_CORNER_RADIUS)
+  url += "&cr=" + String(WIGNET_CORNER_RADIUS);
 #endif
 #if defined(WIGNET_BATTERY_ADC_PIN) || defined(WIGNET_POWER_AXP2101)
   // pwr=ext and, with a battery fitted, its level (power_hal.cpp).
@@ -1560,6 +1568,21 @@ static constexpr uint32_t LCD_BACKGROUND_RGB = 0x000000;
 static constexpr uint16_t LCD_SMALL = 0xD32D;      // #D56668
 static constexpr int LCD_MARGIN = 16;
 
+// How far the bottom lines rise on a panel with rounded corners
+// (WIGNET_CORNER_RADIUS, declared as screen_corner1): the footer, 12 px up
+// at the side margin, is lifted until the corner's arc leaves it on the
+// screen. 8 px for the AMOLED's 60 px; 0 on a square panel.
+static int lcdCornerLift() {
+#if defined(WIGNET_CORNER_RADIUS)
+  int up = 12;
+  // The largest radius that leaves (x, y) from a corner on the screen.
+  while (LCD_MARGIN + up + sqrtf(2.0f * LCD_MARGIN * up) < WIGNET_CORNER_RADIUS) ++up;
+  return up - 12;
+#else
+  return 0;
+#endif
+}
+
 // One line at baseline y.
 static void lcdLine(LcdFrame &gfx, const GFXfont *font, uint16_t color, int y,
                     const String &text) {
@@ -1606,20 +1629,33 @@ static void lcdBootScreen() {
 }
 
 // Laid out for 240 px of height: a taller page (portrait) puts the header
-// and footer at its edges and centres the rest.
+// and footer at its edges and centres the rest. A page wide enough (the
+// AMOLED's 448 or 368 px) keeps each sentence on one line, as e-paper does.
 static void lcdProvisioningScreen(const String &apName) {
   lcdScreen = LcdScreen::Provisioning;
   lcdApName = apName;
   LcdFrame gfx;
   const int middle = (gfx.height() - 240) / 2;
+  int16_t bx, by;
+  uint16_t bw, bh;
+  gfx.setFont(&FreeSans12pt7b);
+  gfx.setTextSize(1);
+  gfx.getTextBounds("Connect to the Wi-Fi network", 0, 0, &bx, &by, &bw, &bh);
+  const bool wide = bx + bw <= gfx.width() - 2 * LCD_MARGIN;
   gfx.fillScreen(LCD_BACKGROUND);
   lcdSmall(gfx, 28, "WIGNET  WI-FI SETUP");
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 74, "Connect to the");
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 100, "Wi-Fi network");
-  lcdLine(gfx, &FreeSansBold12pt7b, LCD_TEXT, middle + 140, apName);
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 178, "to set up");
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 204, "this Wignet");
-  lcdSmall(gfx, gfx.height() - 12, "MAC " + WiFi.macAddress());
+  if (wide) {
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 100, "Connect to the Wi-Fi network");
+    lcdLine(gfx, &FreeSansBold12pt7b, LCD_TEXT, middle + 140, apName);
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 178, "to set up this Wignet");
+  } else {
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 74, "Connect to the");
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 100, "Wi-Fi network");
+    lcdLine(gfx, &FreeSansBold12pt7b, LCD_TEXT, middle + 140, apName);
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 178, "to set up");
+    lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 204, "this Wignet");
+  }
+  lcdSmall(gfx, gfx.height() - 12 - lcdCornerLift(), "MAC " + WiFi.macAddress());
   DisplayHAL::showFrame();
 }
 
@@ -1637,7 +1673,7 @@ static void lcdStartupScreen(const String &mac, const String &ip) {
   lcdSmall(gfx, middle + 168, "IP");
   lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 192, ip);
   // The platform's first page replaces this screen within seconds.
-  lcdSmall(gfx, gfx.height() - 12, "WAITING FOR THE SERVER");
+  lcdSmall(gfx, gfx.height() - 12 - lcdCornerLift(), "WAITING FOR THE SERVER");
   DisplayHAL::showFrame();
 }
 
@@ -1663,7 +1699,7 @@ static void lcdWelcomeScreen() {
   gfx.fillScreen(LCD_BACKGROUND);
   lcdSmall(gfx, 28, "WIGNET  WELCOME");
   // Between the header and the two lines at the bottom.
-  const int top = 40, bottom = gfx.height() - 58;
+  const int top = 40, bottom = gfx.height() - 58 - lcdCornerLift();
   const int span = lcdWelcomeSize + 2 * LCD_QR_QUIET;
   const int module = lcdWelcomeSize ? max(1, min((gfx.width() - 2 * LCD_MARGIN) / span, (bottom - top) / span)) : 0;
   if (module) {
@@ -1676,8 +1712,8 @@ static void lcdWelcomeScreen() {
           gfx.fillRect(LCD_MARGIN + (LCD_QR_QUIET + x) * module, y0 + (LCD_QR_QUIET + y) * module, module,
                        module, LCD_BACKGROUND);
   }
-  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, gfx.height() - 30, "Scan to set it up");
-  lcdSmall(gfx, gfx.height() - 12, lcdWelcomeAddress);
+  lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, gfx.height() - 30 - lcdCornerLift(), "Scan to set it up");
+  lcdSmall(gfx, gfx.height() - 12 - lcdCornerLift(), lcdWelcomeAddress);
   DisplayHAL::showFrame();
 }
 
