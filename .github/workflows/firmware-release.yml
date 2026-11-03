@@ -4,7 +4,7 @@ on:
   pull_request:
     paths: ["esp32/**", "raspberry-tv/**", ".github/workflows/firmware-release.yml"]
   push:
-    tags: ["*/v*"]
+    tags: ["**/v*"]
   workflow_dispatch:
 
 permissions:
