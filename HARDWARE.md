@@ -108,7 +108,7 @@ consistent across boards rather than inventing a new one per target.
 | Screen | When | LCD (`WIGNET_DISPLAY_RGB`) | E-paper |
 |---|---|---|---|
 | Power-on | First thing lit | `lcdBootScreen`: the mark, centred | None: the panel keeps its last image, and a refresh takes seconds |
-| Wi-Fi setup | No known network in range | `lcdProvisioningScreen`: header, "Connect to the Wi-Fi network", the network name in bold, MAC at the bottom | `displayProvisioningScreen`: the LCD's text scaled to the panel (FreeSans 24 pt on 480 px, 12 pt on 240, 9 pt below), each sentence on one line when it fits |
+| Wi-Fi setup | No known network in range | `lcdProvisioningScreen`: header, "Connect to the Wi-Fi network", the network name in bold, MAC at the bottom; each sentence on one line when it fits (the AMOLED) | `displayProvisioningScreen`: the LCD's text scaled to the panel (FreeSans 24 pt on 480 px, 12 pt on 240, 9 pt below), each sentence on one line when it fits |
 | Startup | Wi-Fi joined, before the first page | `lcdStartupScreen`: "Wi-Fi OK", MAC and IP | `displayStartupScreen`: the mark centred, MAC and IP in small print at the bottom left |
 | Welcome | The device has no content yet | `lcdWelcomeScreen` (`welcome_local1`): QR code and address | The platform's page, through `/pic` |
 
