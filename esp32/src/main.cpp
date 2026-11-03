@@ -2156,6 +2156,10 @@ void setup() {
 #endif
   Serial.begin(115200);
   Serial.println("\n[Boot] Firmware " WIGNET_FW_VERSION);
+#if defined(TARGET_WAVESHARE_ESP32S3_AMOLED_18)
+  // Marker for the AMOLED OTA test (the serial log shows which build runs).
+  Serial.println("[Boot] AMOLED 1.8 OTA test 0.1.3");
+#endif
 #if defined(WIGNET_OTA_CLIENT)
   // The OTA deadline starts here, before Wi-Fi (docs/ota.md "Confirmation"),
   // after Serial.begin(): on a UART console (the 7.5 V2) what it says at
