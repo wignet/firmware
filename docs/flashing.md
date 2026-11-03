@@ -10,7 +10,9 @@ Download the image for your board (both screens are 800 × 480):
 These images are not for a FireBeetle, an ESP8266 or an ESP32-S3 LCD.
 
 Get the image and its matching `wignet-<environment>-SHA256SUMS` from the
-[latest release](https://github.com/wignet/firmware/releases/latest).
+[release for your board](https://github.com/wignet/firmware/releases). Driver
+Board releases use `driver-75v2/v…`; PhotoPainter releases use
+`photopainter-73e6/v…`. Do not use another board's release.
 Each image contains the bootloader, partition table and application. The
 PhotoPainter image also initializes an empty LittleFS partition for sounds
 and tunes; it includes no sounds or settings from a configured frame.
@@ -113,17 +115,26 @@ under `esp32/.pio/release/<environment>/`. The release target refuses a local
 configuration or uncommitted firmware inputs. It uses PlatformIO's flash
 offsets and esptool's `merge_bin`.
 
-The GitHub workflow builds pull requests and `v*` tags. A tag creates a
-**draft** release, whose notes are `docs/changelog/<tag>.md` plus a link to
-this guide; a tag without that file fails. Write it for owners: the server
-shows it on the frame's page when it offers the release, so a few lines on
-what changes for them, no install steps. Before publishing the release, flash the exact attached image onto
+The GitHub workflow builds only ESP32 targets affected by a pull request. A
+release tag names one target and version: `driver-75v2/v0.5.0`,
+`photopainter-73e6/v0.5.0`, or `tv-pi0w/v1.0.0`. It builds and attaches only
+that target's images. A tag with no target build-input changes since the last
+release for that target is refused. The TV build runs only for its own tag or
+when its inputs change in a pull request. A tag creates a **draft** release,
+whose notes are `docs/changelog/<tag>.md` plus a link to this guide; a tag
+without that file fails. Write the notes for owners of that board: the server
+and their assistant show them when an update is available. Before publishing
+the release, flash the exact attached image onto
 the supported board and check the full portal → Wi-Fi → owner page → first
 publication path, then a reboot that remembers Wi-Fi. Record what was
 checked in the release notes. Downloadable binaries are GPL-3.0-or-later;
 their exact source is available at the release tag.
 
-A tag also builds the HDMI TV's Buildroot image (Pi Zero W, about an hour):
+Before creating the first target tag, extend the repository's tag ruleset so
+`<target>/v*` tags remain maintainer-only. Keep the existing `v*` rule for the
+historical releases.
+
+A `tv-pi0w/v…` tag builds the HDMI TV's Buildroot image (Pi Zero W, about an hour):
 `wignet-raspberry_pi_hdmi-sdcard.img.xz`, the card for a first install, and
 `wignet-raspberry_pi_hdmi-rootfs.ext4.xz`, the root filesystem the server
 offers over the air once the release is published. The job refuses a dirty
