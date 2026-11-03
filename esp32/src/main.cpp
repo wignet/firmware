@@ -1585,16 +1585,36 @@ static int lcdCornerLift() {
 
 // One line at baseline y.
 static void lcdLine(LcdFrame &gfx, const GFXfont *font, uint16_t color, int y,
-                    const String &text) {
+                    const String &text, int size = 1) {
   gfx.setFont(font);
-  gfx.setTextSize(1);
+  gfx.setTextSize(size);
   gfx.setTextColor(color);
   gfx.setCursor(LCD_MARGIN, y);
   gfx.print(text);
 }
 
+// Org_01's 5 px, doubled on a page of 360 px or more a side (the AMOLED's
+// 448x368, at 78 um a pixel), unless that line would not fit across.
+static int lcdSmallSize(LcdFrame &gfx, const String &text) {
+  if (min(gfx.width(), gfx.height()) < 360) return 1;
+  int16_t bx, by;
+  uint16_t bw, bh;
+  gfx.setFont(&Org_01);
+  gfx.setTextSize(2);
+  gfx.getTextBounds(text, 0, 0, &bx, &by, &bw, &bh);
+  return bx + bw <= gfx.width() - 2 * LCD_MARGIN ? 2 : 1;
+}
+
+// Small print grows up from its baseline: a footer keeps its place.
 static void lcdSmall(LcdFrame &gfx, int y, const String &text) {
-  lcdLine(gfx, &Org_01, LCD_SMALL, y, text);
+  lcdLine(gfx, &Org_01, LCD_SMALL, y, text, lcdSmallSize(gfx, text));
+}
+
+// The header: its top stays 23 px from the edge whatever its size, clear of
+// a 60 px corner (lcdCornerLift).
+static void lcdHeader(LcdFrame &gfx, const String &text) {
+  const int size = lcdSmallSize(gfx, text);
+  lcdLine(gfx, &Org_01, LCD_SMALL, 28 + 5 * (size - 1), text, size);
 }
 
 static String lcdApName, lcdMac, lcdIp;
@@ -1643,7 +1663,7 @@ static void lcdProvisioningScreen(const String &apName) {
   gfx.getTextBounds("Connect to the Wi-Fi network", 0, 0, &bx, &by, &bw, &bh);
   const bool wide = bx + bw <= gfx.width() - 2 * LCD_MARGIN;
   gfx.fillScreen(LCD_BACKGROUND);
-  lcdSmall(gfx, 28, "WIGNET  WI-FI SETUP");
+  lcdHeader(gfx, "WIGNET  WI-FI SETUP");
   if (wide) {
     lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 100, "Connect to the Wi-Fi network");
     lcdLine(gfx, &FreeSansBold12pt7b, LCD_TEXT, middle + 140, apName);
@@ -1666,7 +1686,7 @@ static void lcdStartupScreen(const String &mac, const String &ip) {
   LcdFrame gfx;
   const int middle = (gfx.height() - 240) / 2;
   gfx.fillScreen(LCD_BACKGROUND);
-  lcdSmall(gfx, 28, "WIGNET  CONNECTED");
+  lcdHeader(gfx, "WIGNET  CONNECTED");
   lcdLine(gfx, &FreeSansBold12pt7b, LCD_TEXT, middle + 80, "Wi-Fi OK");
   lcdSmall(gfx, middle + 116, "MAC");
   lcdLine(gfx, &FreeSans12pt7b, LCD_TEXT, middle + 140, mac);
@@ -1697,7 +1717,7 @@ static void lcdWelcomeScreen() {
   lcdScreen = LcdScreen::Welcome;
   LcdFrame gfx;
   gfx.fillScreen(LCD_BACKGROUND);
-  lcdSmall(gfx, 28, "WIGNET  WELCOME");
+  lcdHeader(gfx, "WIGNET  WELCOME");
   // Between the header and the two lines at the bottom.
   const int top = 40, bottom = gfx.height() - 58 - lcdCornerLift();
   const int span = lcdWelcomeSize + 2 * LCD_QR_QUIET;
