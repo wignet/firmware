@@ -2,9 +2,9 @@ name: Firmware download
 
 on:
   pull_request:
-    paths: ["esp32/**", ".github/workflows/firmware-release.yml"]
+    paths: ["esp32/**", "raspberry-tv/**", ".github/workflows/firmware-release.yml"]
   push:
-    tags: ["v*"]
+    tags: ["*/v*"]
   workflow_dispatch:
 
 permissions:
@@ -12,6 +12,9 @@ permissions:
 
 jobs:
   build:
+    # On a target tag, build only that target. Pull requests and a manual
+    # dispatch still build the ESP32 targets for validation.
+    if: github.event_name != 'push' || startsWith(github.ref_name, format('{0}/', matrix.release_target))
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -23,19 +26,55 @@ jobs:
         include:
           - environment: waveshare_driver_75v2
             ota: true
+            release_target: driver-75v2
           - environment: waveshare_photopainter_73e6
             ota: true
+            release_target: photopainter-73e6
           # First-install image only until the AMOLED has an OTA bench.
           - environment: waveshare_esp32s3_amoled_18
             ota: false
+            release_target: amoled-18
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install PlatformIO
         run: python -m pip install platformio==6.2.0
+      - name: Check target build inputs
+        id: scope
+        env:
+          RELEASE_TARGET: ${{ matrix.release_target }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=0
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            changed=1
+          elif [ "$GITHUB_EVENT_NAME" = push ]; then
+            previous=$(git tag --list "$RELEASE_TARGET/v*" --sort=-version:refname | grep -Fxv "$RELEASE_TAG" | head -n 1 || true)
+            if [ -z "$previous" ]; then
+              previous=$(git tag --list 'v*' --sort=-version:refname | head -n 1)
+            fi
+            [ -z "$previous" ] && changed=1 || { base="$previous"; head="$RELEASE_TAG"; }
+          else
+            base="$BASE_SHA"
+            head="$HEAD_SHA"
+          fi
+          if [ -n "${base:-}" ]; then
+            result=$(python3 esp32/target_inputs.py "$RELEASE_TARGET" "$base" "$head")
+            [ "$result" = changed ] && changed=1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$changed" = 0 ]; then
+            echo "::error::no build inputs changed for $RELEASE_TARGET since $previous"
+            exit 1
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
       - name: Build a clean first-install image
+        if: steps.scope.outputs.changed == '1'
         working-directory: esp32
         env:
           FIRMWARE_ENVIRONMENT: ${{ matrix.environment }}
@@ -44,6 +83,7 @@ jobs:
           cp src/config.h.example src/config.h
           pio run -e "$FIRMWARE_ENVIRONMENT" -t release
       - uses: actions/upload-artifact@v4
+        if: steps.scope.outputs.changed == '1'
         with:
           name: firmware-${{ matrix.environment }}
           path: esp32/.pio/release/${{ matrix.environment }}/*
@@ -54,7 +94,7 @@ jobs:
   # (wignet-raspberry_pi_hdmi-rootfs.ext4.xz, docs/ota.md "Raspberry Pi
   # profile" on the server). About an hour: only for tags and by hand.
   tv:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'tv-pi0w/')
     runs-on: ubuntu-latest
     env:
       BUILDROOT_TAG: "2026.02.3"
@@ -63,23 +103,64 @@ jobs:
       OUT: ${{ github.workspace }}/../buildroot-output
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check target build inputs
+        id: scope
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=0
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            previous=$(git tag --list 'tv-pi0w/v*' --sort=-version:refname | grep -Fxv "$RELEASE_TAG" | head -n 1 || true)
+            if [ -z "$previous" ]; then
+              previous=$(git tag --list 'v*' --sort=-version:refname | head -n 1)
+            fi
+            if [ -z "$previous" ]; then
+              changed=1
+            else
+              base="$previous"
+              head="$RELEASE_TAG"
+            fi
+          elif [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            base="$BASE_SHA"
+            head="$HEAD_SHA"
+          else
+            changed=1
+          fi
+          if [ -n "${base:-}" ]; then
+            result=$(python3 esp32/target_inputs.py tv-pi0w "$base" "$head")
+            [ "$result" = changed ] && changed=1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$changed" = 0 ]; then
+            echo "::error::no build inputs changed for tv-pi0w since $previous"
+            exit 1
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
       - name: Install Buildroot's host tools
+        if: steps.scope.outputs.changed == '1'
         run: sudo apt-get update && sudo apt-get install -y bc cpio rsync unzip file e2fsprogs
       - name: Fetch Buildroot ${{ env.BUILDROOT_TAG }}
+        if: steps.scope.outputs.changed == '1'
         run: |
           git clone --depth 1 --branch "$BUILDROOT_TAG" https://gitlab.com/buildroot.org/buildroot.git ../buildroot
           test "$(git -C ../buildroot rev-parse HEAD)" = "$BUILDROOT_COMMIT"
       - uses: actions/cache@v4
+        if: steps.scope.outputs.changed == '1'
         with:
           path: ${{ env.BR2_DL_DIR }}
           key: buildroot-dl-${{ env.BUILDROOT_TAG }}-${{ hashFiles('raspberry-tv/buildroot/configs/*', 'raspberry-tv/buildroot/package/**') }}
           restore-keys: buildroot-dl-${{ env.BUILDROOT_TAG }}-
       - name: Build the image
+        if: steps.scope.outputs.changed == '1'
         run: |
           make -C ../buildroot O="$OUT" BR2_EXTERNAL="$PWD/raspberry-tv/buildroot" wignet_tv_pi0w_defconfig
           make -C ../buildroot O="$OUT"
       # What the server would refuse, or what an owner must never receive.
       - name: Check the image
+        if: steps.scope.outputs.changed == '1'
         run: |
           rootfs="$OUT/images/rootfs.ext4"
           version=$(debugfs -R "cat /usr/local/lib/wignet-tv/VERSION" "$rootfs")
@@ -93,6 +174,7 @@ jobs:
             echo "::error::a development SSH key is in the image"; exit 1
           fi
       - name: Name and hash the images
+        if: steps.scope.outputs.changed == '1'
         run: |
           mkdir release
           xz -T0 -6 -c "$OUT/images/rootfs.ext4" > release/wignet-raspberry_pi_hdmi-rootfs.ext4.xz
@@ -101,13 +183,17 @@ jobs:
           cat release/raspberry_pi_hdmi-SHA256SUMS
           ls -l release
       - uses: actions/upload-artifact@v4
+        if: steps.scope.outputs.changed == '1'
         with:
           name: firmware-raspberry_pi_hdmi
           path: release/*
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      (needs.tv.result == 'success' || needs.tv.result == 'skipped')
     needs: [build, tv]
     runs-on: ubuntu-latest
     permissions:
@@ -131,6 +217,25 @@ jobs:
             echo "::error::$changelog is missing: write what changed for owners"
             exit 1
           fi
+          target="${RELEASE_TAG%%/*}"
+          case "$target" in
+            driver-75v2) expected="wignet-waveshare_driver_75v2-app.bin"; prefix="wignet-waveshare_driver_75v2-" ;;
+            photopainter-73e6) expected="wignet-waveshare_photopainter_73e6-app.bin"; prefix="wignet-waveshare_photopainter_73e6-" ;;
+            amoled-18) expected="wignet-waveshare_esp32s3_amoled_18-factory.bin"; prefix="wignet-waveshare_esp32s3_amoled_18-" ;;
+            tv-pi0w) expected="wignet-raspberry_pi_hdmi-rootfs.ext4.xz"; prefix="wignet-raspberry_pi_hdmi-" ;;
+            *) echo "::error::unknown release target in $RELEASE_TAG"; exit 1 ;;
+          esac
+          if ! compgen -G "firmware/$expected" >/dev/null; then
+            echo "::error::target $target did not produce $expected"
+            exit 1
+          fi
+          for file in firmware/wignet-*; do
+            [ -e "$file" ] || continue
+            case "${file#firmware/}" in
+              "$prefix"*) ;;
+              *) echo "::error::release contains an image for a different target: ${file#firmware/}"; exit 1 ;;
+            esac
+          done
           { cat "$changelog"
             printf '\nInstall over USB: https://github.com/%s/blob/%s/docs/flashing.md\n' \
               "$GITHUB_REPOSITORY" "$RELEASE_TAG"
