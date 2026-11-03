@@ -54,7 +54,11 @@ jobs:
             exit 0
           fi
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            changed=1
+            # A dispatch on a target tag builds just that target, allowing a
+            # missed tag event to be recovered without moving the immutable tag.
+            if [[ "$GITHUB_REF" != refs/tags/* || "${RELEASE_TAG%%/*}" = "$RELEASE_TARGET" ]]; then
+              changed=1
+            fi
           elif [ "$GITHUB_EVENT_NAME" = push ]; then
             previous=$(git tag --list "$RELEASE_TARGET/v*" --sort=-version:refname | grep -Fxv "$RELEASE_TAG" | head -n 1 || true)
             if [ -z "$previous" ]; then
@@ -102,7 +106,7 @@ jobs:
   # (wignet-raspberry_pi_hdmi-rootfs.ext4.xz, docs/ota.md "Raspberry Pi
   # profile" on the server). About an hour: only for tags and by hand.
   tv:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'tv-pi0w/')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')) || startsWith(github.ref_name, 'tv-pi0w/')
     runs-on: ubuntu-latest
     env:
       BUILDROOT_TAG: "2026.02.3"
@@ -199,7 +203,7 @@ jobs:
 
   release:
     if: >-
-      always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') &&
+      always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/') &&
       (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       (needs.tv.result == 'success' || needs.tv.result == 'skipped')
     needs: [build, tv]
