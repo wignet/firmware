@@ -1,13 +1,15 @@
 # Install the ready-to-flash firmware
 
-Download the image for your board (both screens are 800 × 480):
+Download the image for your board:
 
 | Board and panel | File | esptool chip |
 | --- | --- | --- |
 | Waveshare ESP32 Driver Board + 7.5-inch V2 black-and-white | `wignet-waveshare_driver_75v2-factory.bin` | `esp32` |
 | Waveshare ESP32-S3 PhotoPainter Rev2.0 + 7.3-inch Spectra 6 | `wignet-waveshare_photopainter_73e6-factory.bin` | `esp32s3` |
+| Waveshare ESP32-S3-Touch-AMOLED-1.8 | `wignet-waveshare_esp32s3_amoled_18-factory.bin` | `esp32s3` |
 
-These images are not for a FireBeetle, an ESP8266 or an ESP32-S3 LCD.
+These images are not interchangeable. In particular, the AMOLED image is not
+for an ESP32-S3 LCD, FireBeetle or ESP8266.
 
 Get the image and its matching `wignet-<environment>-SHA256SUMS` from the
 [latest release](https://github.com/wignet/firmware/releases/latest).
@@ -44,11 +46,22 @@ Replace `PORT` with the board's port, such as `/dev/ttyACM0`,
 python -m esptool --chip esp32 --port PORT --baud 115200 write_flash 0x0 wignet-waveshare_driver_75v2-factory.bin
 ```
 
-For the **PhotoPainter Spectra 6**:
+For the **PhotoPainter Spectra 6** or **AMOLED 1.8**:
 
 ```sh
 python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0 wignet-waveshare_photopainter_73e6-factory.bin
 ```
+
+For the AMOLED, use its matching filename:
+
+```sh
+python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0 wignet-waveshare_esp32s3_amoled_18-factory.bin
+```
+
+The AMOLED is a 368 × 448 portrait panel; its firmware draws a 448 × 368
+landscape buffer. The first-install image resets stored Wi-Fi and local
+settings. It is a USB-only release image; over-the-air updates are not enabled
+for this board.
 
 This **first-install image resets stored Wi-Fi and local settings**: the
 merged file fills the space between the boot images with erased bytes. It
@@ -105,6 +118,7 @@ On a clean checkout, copy `esp32/src/config.h.example` to `config.h`, then:
 cd esp32
 pio run -e waveshare_driver_75v2 -t release
 pio run -e waveshare_photopainter_73e6 -t release
+pio run -e waveshare_esp32s3_amoled_18 -t release
 ```
 
 The image, checksum, source-commit record (`wignet-<environment>-BUILD.json`)
