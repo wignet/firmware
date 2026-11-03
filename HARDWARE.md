@@ -132,7 +132,9 @@ Rules for these screens:
   text only: neither carries the mark.
 - **Text at the edges, left-aligned:** a small header at the top and small
   print (Org_01: MAC, IP, address) at the bottom, at the screen's margin
-  (16 px on LCD, `4u` on e-paper). Nothing else near the mark.
+  (16 px on LCD, `4u` on e-paper). Nothing else near the mark. On a colour
+  page of 360 px or more a side (the AMOLED 1.8) the small print is doubled
+  (`lcdSmallSize`), unless a line would not fit across.
 - **Clear of the corners:** a panel with rounded corners
   (`WIGNET_CORNER_RADIUS`) shows nothing beyond them, and the small print
   at the bottom edge sits in them. `lcdCornerLift()` raises the bottom lines
