@@ -118,7 +118,13 @@ class TvOtaTests(unittest.TestCase):
         first, second = ota.query(), ota.query()
         self.assertRegex(first["on"], r"^[0-9a-f]{32}$")
         self.assertNotEqual(first["on"], second["on"])
-        self.assertEqual(set(first), {"on"})
+        self.assertEqual(set(first), {"on", "os"})
+
+    def test_poll_declares_the_slot_an_offer_would_be_written_to(self):
+        ota = self.ota()
+        self.assertEqual(ota.query()["os"], 1024 * 1024)
+        ota.platform.booted = None
+        self.assertNotIn("os", ota.query())
 
     def test_accepted_offer_writes_the_other_slot_and_reboots_with_tryboot(self):
         ota = self.ota()
