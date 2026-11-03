@@ -26,6 +26,11 @@ TARGETS = {
         "hal": "esp32/src/hal/waveshare_esp32s3_amoled_18.cpp",
         "partitions": set(),
     },
+    "lcd-2": {
+        "environment": "waveshare_esp32s3_lcd_2",
+        "hal": "esp32/src/hal/waveshare_esp32s3_lcd.cpp",
+        "partitions": set(),
+    },
     "tv-pi0w": {"environment": None, "hal": None, "partitions": set()},
 }
 

@@ -21,6 +21,7 @@ TARGETS = {
     "waveshare_driver_75v2": ("Waveshare ESP32 Driver Board · 7.5 V2", "esp32", "ESP32"),
     "waveshare_photopainter_73e6": ("Waveshare PhotoPainter · 7.3 Spectra 6", "esp32s3", "ESP32-S3"),
     "waveshare_esp32s3_amoled_18": ("Waveshare ESP32-S3 Touch AMOLED · 1.8", "esp32s3", "ESP32-S3"),
+    "waveshare_esp32s3_lcd_2": ("Waveshare ESP32-S3-LCD · 2", "esp32s3", "ESP32-S3"),
 }
 
 
