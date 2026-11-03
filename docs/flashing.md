@@ -63,8 +63,8 @@ python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0 wigne
 
 The AMOLED is a 368 × 448 portrait panel; its firmware draws a 448 × 368
 landscape buffer. The first-install image resets stored Wi-Fi and local
-settings. It is a USB-only release image; over-the-air updates are not enabled
-for this board.
+settings. After it, the board installs later releases over the air, as the
+PhotoPainter does.
 
 This **first-install image resets stored Wi-Fi and local settings**: the
 merged file fills the space between the boot images with erased bytes. It
@@ -133,8 +133,8 @@ offsets and esptool's `merge_bin`.
 The GitHub workflow builds only ESP32 targets affected by a pull request. A
 release tag names one target and version: `driver-75v2/v0.5.0`,
 `photopainter-73e6/v0.5.0`, `amoled-18/v0.1.0`, or `tv-pi0w/v1.0.0`. It builds and attaches only
-that target's images. The AMOLED release is for USB first installation; that
-board does not support OTA yet. A tag with no target build-input changes since the last
+that target's images. An AMOLED release carries its first-install image and the
+image the server installs over the air. A tag with no target build-input changes since the last
 release for that target is refused. The TV build runs only for its own tag or
 when its inputs change in a pull request. A tag creates a **draft** release,
 whose notes are `docs/changelog/<tag>.md` plus a link to this guide; a tag

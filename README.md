@@ -14,7 +14,7 @@ the GPL-3.0.
 [ready-to-flash downloads](https://github.com/wignet/firmware/releases)
 and follow [the USB installation guide](docs/flashing.md). No PlatformIO or
 compilation is needed. Choose the file matching your board. The AMOLED image
-is a USB-only first installation; OTA will follow hardware validation.
+installs once over USB; later releases come over the air.
 
 To build from source:
 

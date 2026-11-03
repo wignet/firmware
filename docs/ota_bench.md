@@ -154,3 +154,26 @@ SNTP, so the OTA client now does. And `OtaClient::begin()` ran before
 `Serial.begin()`, which loses what it says at boot on a UART console; it now
 runs just after. The loop stack kept at least 9,340 of its 16 KB during a
 download.
+
+## The AMOLED 1.8
+
+The ESP32-S3-Touch-AMOLED-1.8 passed the same gate before its production
+build declared `ota1`. Its bench build is
+`[env:waveshare_esp32s3_amoled_18_ota1_bench]`, served by `bench/` and the
+commands above as they are. Its table (`default_16MB.csv`) already has two
+6.25 MiB app slots: no migration, `-t upload` keeps Wi-Fi and LittleFS.
+
+What differs from the PhotoPainter:
+
+- **Wrong chip**: offer the 7.5 V2 build (an ESP32 image):
+  `ota=failed:<id>:chip`.
+- **Power**: it measures its own (the AXP2101's VBUS, `PowerHAL::available()`),
+  so it installs only on USB or a charger. The bench board has no battery
+  fitted, so the unplugged case did not run.
+- **Download**: 1.56 MB in about 40 s over Wi-Fi. What the screen does
+  meanwhile (the LVGL task keeps running on the other core) was not watched.
+
+Every case above, network faults and built-in ones, passed on SideWig3
+(`90:70:69:fe:4d:54`) on 2026-11-03: counters 1 to 17, driven by a script
+that ran one case after another against the serial console and the server.
+The loop stack kept at least 9,672 of its 16 KB during a download.

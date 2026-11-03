@@ -656,6 +656,10 @@ int fetchSchedule() {
   // buffer pixels; the platform tells agents what they hide.
   url += "%2Cscreen_corner1";
 #endif
+#if defined(WIGNET_OTA_CAPABLE)
+  // ota1: this board installs firmware offered on /schedule (docs/ota.md).
+  url += "%2Cota1";
+#endif
 #if defined(WIGNET_SELF_ORIENT)
   // self_orient1: the accelerometer turns the upright page itself (square
   // panels only); ori= is the turn applied now, for the owner's page.
