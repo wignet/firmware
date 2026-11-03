@@ -68,6 +68,10 @@
 // (EXIO4), not a GPIO. GPIO5 is a panel data line here.
 #define WIGNET_BUTTON_KEY -1
 #define WIGNET_BUTTON_PWR -1
+// The CO5300 takes a window only from an even column and row, an even
+// number of pixels wide and high (Waveshare's LVGL examples round theirs):
+// an odd one is written shifted, and moving sprites leave stripes behind.
+#define WIGNET_PANEL_EVEN_AREAS 1
 
 #elif defined(TARGET_WAVESHARE_ESP32S3_LCD_154)
 #define WIGNET_HAS_AUDIO 1
