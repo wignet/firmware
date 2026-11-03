@@ -133,6 +133,11 @@ Rules for these screens:
 - **Text at the edges, left-aligned:** a small header at the top and small
   print (Org_01: MAC, IP, address) at the bottom, at the screen's margin
   (16 px on LCD, `4u` on e-paper). Nothing else near the mark.
+- **Clear of the corners:** a panel with rounded corners
+  (`WIGNET_CORNER_RADIUS`) shows nothing beyond them, and the small print
+  at the bottom edge sits in them. `lcdCornerLift()` raises the bottom lines
+  together until the corner's arc leaves them on the screen: 8 px on the
+  AMOLED 1.8" (60 px), 0 on a square panel.
 - **Drawn at the panel's default rotation** (`getDefaultDisplayRotation`);
   the owner's orientation only reaches the platform's pages.
 - **E-paper: one full refresh per screen,** and no screen of its own before
@@ -499,6 +504,13 @@ starts as mono1, 800x480, no capabilities, and counted as on battery.
   `w`/`h`; the admin values are only a fallback and an override. The HDMI
   `rgb` client (docs/hdmi_tv.md) is the model: an immutable opaque sRGB PNG
   alongside the compatibility BMP, fetched at `/pic/4displayB5.png`.
+- **Rounded or round panel:** nothing on the server either. Measure the
+  radius on the board, in buffer pixels (the datasheet rarely gives it: the
+  AMOLED 1.8"'s 60 px came from a scene that draws the corner for a radius
+  set by touch, 2026-11-03), and set `-DWIGNET_CORNER_RADIUS=<px>` in its
+  environment: the firmware then declares `screen_corner1` with `cr=`, and
+  agents read `shape`, `corner_radius` and `safe_inset`. Half the short side
+  is a round screen.
 - **Power sensing on a new board:** nothing on the server: it already reads
   `pwr`/`bat`/`mv`/`chg` (`backoffice/power.py`). Add the board to the table
   above, and to `docs/power.md`.

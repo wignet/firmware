@@ -139,7 +139,9 @@ GET https://api.wignet.app/pic/4displayB5.png?mac=<device-mac>&w=1920&h=1080
 ```
 
 - `rgb` gives the device the RGB profile; `screen_size1` makes this poll's
-  `w`/`h` its buffer size.
+  `w`/`h` its buffer size. With `screen_size1`, `screen_corner1` makes `cr=`
+  the radius of the panel's corners in those pixels (`&cr=60` on the AMOLED
+  1.8"; half the short side for a round screen).
 - The PNG is an opaque full sRGB page. `ETag`/`304`, the failure rule and the
   cadence mean the same as for BMP.
 - The PNG route answers `406` until the profile is `rgb`. The first page after
