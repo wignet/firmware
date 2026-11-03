@@ -8,6 +8,7 @@ Download the image for your board:
 | Waveshare ESP32-S3 PhotoPainter Rev2.0 + 7.3-inch Spectra 6 | `wignet-waveshare_photopainter_73e6-factory.bin` | `esp32s3` |
 | Waveshare ESP32-S3-Touch-AMOLED-1.8 | `wignet-waveshare_esp32s3_amoled_18-factory.bin` | `esp32s3` |
 | Waveshare ESP32-S3-LCD-2 | `wignet-waveshare_esp32s3_lcd_2-factory.bin` | `esp32s3` |
+| Waveshare ESP32 Driver Board + 3.52-inch black-and-white | `wignet-waveshare_driver_35-factory.bin` | `esp32` |
 
 These images are not interchangeable. In particular, the AMOLED image is not
 for an ESP32-S3 LCD, and the LCD 2 image is not for the 1.54-inch LCD, a
@@ -134,6 +135,7 @@ pio run -e waveshare_driver_75v2 -t release
 pio run -e waveshare_photopainter_73e6 -t release
 pio run -e waveshare_esp32s3_amoled_18 -t release
 pio run -e waveshare_esp32s3_lcd_2 -t release
+pio run -e waveshare_driver_35 -t release
 ```
 
 The image, checksum, source-commit record (`wignet-<environment>-BUILD.json`)
