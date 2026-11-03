@@ -25,6 +25,8 @@ jobs:
             ota: true
           - environment: waveshare_photopainter_73e6
             ota: true
+          - environment: waveshare_esp32s3_amoled_18
+            ota: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
