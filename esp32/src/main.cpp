@@ -726,7 +726,7 @@ int fetchSchedule() {
 #elif defined(WIGNET_ORIENTATION_REPORT)
   url += "&ori=" + String(lcdHeldTurn);
 #endif
-#elif defined(TARGET_WAVESHARE_DRIVER_75V2) && defined(WIGNET_OTA_CAPABLE)
+#elif (defined(TARGET_WAVESHARE_DRIVER_75V2) || defined(TARGET_WAVESHARE_DRIVER_35)) && defined(WIGNET_OTA_CAPABLE)
   // ota1 only once the USB migration has put the 1.75 MiB slots on the board
   // (partitions/ota_4m.csv): this image flashed alone over the old table
   // can't hold a larger one (docs/ota.md "Board ids").
