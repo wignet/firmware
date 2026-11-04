@@ -696,6 +696,13 @@ String pollQuery() {
 
   String query = "&on=";
   query += nonceOutstanding;
+  // os=: the slot an offer would be written to, so the server never offers an
+  // image that cannot fit (docs/ota.md "What the server knows").
+  const esp_partition_t *next = esp_ota_get_next_update_partition(nullptr);
+  if (next != nullptr) {
+    query += "&os=";
+    query += String(static_cast<unsigned long>(next->size));
+  }
   if (pendingFlag && runningHashReady) {
     char hex[65];
     toHex(runningHash, 32, hex);

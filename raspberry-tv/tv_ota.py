@@ -463,6 +463,14 @@ class TvOta:
         self.nonce = os.urandom(16).hex()
         self.nonce_at = self.clock()
         fields = {"on": self.nonce}
+        # os=: the root slot an offer would be written to, so the server never
+        # offers a root filesystem it cannot hold (docs/ota.md, wignet).
+        booted = self.platform.booted_slot()
+        if booted is not None:
+            try:
+                fields["os"] = self.platform.slot_bytes(other(booted))
+            except (OSError, ValueError):
+                pass
         record = self.record
         if self.pending:
             fields["oh"] = self.running_hash

@@ -332,7 +332,8 @@ layout cannot be updated over the air: flash this image once.
 
 `tv_ota.py` follows the ESP32 contract of `docs/ota.md` on the server (signed
 `otaOffer` bound to the poll's `on=` nonce, `ota=`/`oc=` reports, `oh=` and a
-signed `otaConfirm` while pending), with `hw` `raspberry_pi_hdmi`. The
+signed `otaConfirm` while pending, and `os=`, the bytes of the root slot an
+offer would be written to), with `hw` `raspberry_pi_hdmi`. The
 artifact is the root filesystem image, served xz-compressed; `sha256` and
 `size` are those of the uncompressed ext4, the bytes the slot holds. The
 client writes the other slot, checks the hash, copies its `/boot` to `pN/`,
