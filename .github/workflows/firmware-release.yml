@@ -44,9 +44,9 @@ jobs:
           - environment: waveshare_esp32s3_lcd_2
             ota: true
             release_target: lcd-2
-          # First install only: no OTA bench yet, so no app image is published.
+          # OTA: its bench passed on a 3.52 NQ01, 2026-11-04 (docs/ota_bench.md).
           - environment: waveshare_driver_35
-            ota: false
+            ota: true
             release_target: driver-35
     steps:
       - uses: actions/checkout@v4
@@ -253,7 +253,7 @@ jobs:
             photopainter-73e6) expected="wignet-waveshare_photopainter_73e6-app.bin"; prefix="wignet-waveshare_photopainter_73e6-" ;;
             amoled-18) expected="wignet-waveshare_esp32s3_amoled_18-app.bin"; prefix="wignet-waveshare_esp32s3_amoled_18-" ;;
             lcd-2) expected="wignet-waveshare_esp32s3_lcd_2-app.bin"; prefix="wignet-waveshare_esp32s3_lcd_2-" ;;
-            driver-35) expected="wignet-waveshare_driver_35-factory.bin"; prefix="wignet-waveshare_driver_35-" ;;
+            driver-35) expected="wignet-waveshare_driver_35-app.bin"; prefix="wignet-waveshare_driver_35-" ;;
             tv-pi0w) expected="wignet-raspberry_pi_hdmi-rootfs.ext4.xz"; prefix="wignet-raspberry_pi_hdmi-" ;;
             *) echo "::error::unknown release target in $RELEASE_TAG"; exit 1 ;;
           esac

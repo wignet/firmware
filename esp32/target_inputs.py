@@ -19,7 +19,7 @@ TARGETS = {
     "driver-35": {
         "environment": "waveshare_driver_35",
         "hal": "esp32/src/hal/waveshare_driver_35.cpp",
-        "partitions": set(),
+        "partitions": {"esp32/partitions/ota_4m.csv"},
     },
     "photopainter-73e6": {
         "environment": "waveshare_photopainter_73e6",
