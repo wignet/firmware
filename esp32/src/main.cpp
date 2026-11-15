@@ -616,6 +616,34 @@ bool decodeAndDisplayImage(Stream &client, bool allowColor,
   return false;
 }
 
+#if defined(WIGNET_PACED_PLAYER)
+// The panel's own full-redraw time, measured: the longest BUSY period of a
+// full refresh (GxEPD2 calls this while it waits on BUSY, every ~1 ms). Sent
+// as rd= so the platform paces scenes on this panel's real figure
+// (docs/scenes_paced.md); the last measure, kept across deep sleep.
+static uint32_t panelBusyFromMs = 0, panelBusyLastMs = 0, panelBusyLongestMs = 0;
+RTC_DATA_ATTR uint32_t panelRedrawMs = 0;
+
+static void onPanelBusy(const void *) {
+  const uint32_t now = millis();
+  if (!panelBusyFromMs || now - panelBusyLastMs > 20) panelBusyFromMs = now; // a new BUSY period
+  panelBusyLastMs = now;
+  if (now - panelBusyFromMs > panelBusyLongestMs) panelBusyLongestMs = now - panelBusyFromMs;
+  delay(1); // what GxEPD2 does without a callback: other tasks run meanwhile
+}
+
+// After a full redraw: its BUSY period is the panel's redraw time.
+static void notePanelRefresh() {
+  // Shorter than a second is not a full refresh of these panels (a lost
+  // callback, a partial update): not believed.
+  if (panelBusyLongestMs >= 1000) {
+    panelRedrawMs = panelBusyLongestMs;
+    Serial.printf("[Paced] Panel refresh (BUSY) %lu ms\n", static_cast<unsigned long>(panelRedrawMs));
+  }
+  panelBusyLongestMs = 0;
+}
+#endif
+
 // ============ Schedule Functions ============
 
 int fetchSchedule() {
@@ -650,6 +678,7 @@ int fetchSchedule() {
   // sev= the last scene event received. With audio_out its sounds play.
   url += "%2Cscene_paced1";
   url += PacedPlayer::scheduleParams();
+  if (panelRedrawMs) url += "&rd=" + String(panelRedrawMs); // measured, above
 #endif
   url += PowerHAL::queryParams();
 #elif defined(WIGNET_DISPLAY_RGB)
@@ -751,6 +780,7 @@ int fetchSchedule() {
   }
 #if defined(WIGNET_PACED_PLAYER)
   url += PacedPlayer::scheduleParams(); // in= its button, sev= scene events
+  if (panelRedrawMs) url += "&rd=" + String(panelRedrawMs); // measured panel refresh
 #endif
 #endif
   // The Wi-Fi networks this Wignet knows, never passwords (docs/wifi.md).
@@ -1123,8 +1153,12 @@ ImageRequestResult fetchWignetRepresentation(const String &url,
     stream->setTimeout(IMAGE_READ_TIMEOUT_MS);
     const int responseLength = http.getSize();
     const uint32_t drawStartedMs = millis();
+#if defined(WIGNET_PACED_PLAYER)
+    panelBusyLongestMs = 0;
+#endif
     if (decodeAndDisplayImage(*stream, preferColor, responseLength, info)) {
 #if defined(WIGNET_PACED_PLAYER)
+      notePanelRefresh();
       PacedPlayer::onRedraw(drawStartedMs); // rule 1: the lock covers /pic too
 #else
       (void)drawStartedMs;
@@ -2164,11 +2198,14 @@ void handleWiFiReset() {
 // A paced scene's page, drawn from flash as /pic is (PacedPlayer::Hooks).
 static bool pacedDraw(Stream &file, int length) {
   DecodedImageInfo info;
+  panelBusyLongestMs = 0;
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
-  return decodeAndDisplayImage(file, true, length, info);
+  const bool drawn = decodeAndDisplayImage(file, true, length, info);
 #else
-  return decodeAndDisplayImage(file, false, length, info);
+  const bool drawn = decodeAndDisplayImage(file, false, length, info);
 #endif
+  if (drawn) notePanelRefresh();
+  return drawn;
 }
 
 // A scene plays only while the board stays awake; on battery it shows its
@@ -2286,6 +2323,7 @@ void setup() {
     hooks.draw = pacedDraw;
     hooks.awake = pacedAwake;
     PacedPlayer::begin(hooks); // after the alarm's LittleFS mount
+    DisplayHAL::getDisplay()->epd2.setBusyCallback(onPanelBusy);
   }
 #endif
 #if defined(WIGNET_HAS_IMU)
