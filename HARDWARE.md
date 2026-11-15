@@ -45,11 +45,11 @@ including what was and was not validated on hardware.
   networks it knows on every `/schedule` (`wifi=`: the one in use, its RSSI,
   the known names, never a password) and forgets those `/schedule` lists in
   `wifiForget`, never the one in use (DEVICE_API.md).
-- **Scenes (`scene2`) only on a screen that redraws in under a second:**
+- **Live scenes (`scene2`) only on a screen that redraws in under a second:**
   colour LCDs, OLEDs, HDMI. A scene animates sprites and reacts to a press at
   once; e-paper (seconds to tens of seconds a refresh, ghosting) never
-  declares a scene token, and keeps slides and events. The server also keeps
-  scenes to full-colour (`rgb`) screens. A board that plays them uses
+  declares `scene2`; it may play *paced* scenes (`scene_paced1`, below). The
+  server keeps live scenes to full-colour (`rgb`) screens. A board that plays them uses
   `scene_player.cpp` (LVGL, `WIGNET_SCENES`) around `scene_runtime.cpp`,
   declares `scene2` (the scene runtime 2, `docs/scene_runtime.md`) and its
   buttons in `in=` (never the power button), and keeps the protected
@@ -90,6 +90,23 @@ including what was and was not validated on hardware.
   `tinfl` (docs/scenes.md "Compressed assets"), and follows `scene.slide`
   from `/schedule`: in a slide `end` does nothing and a 5 s hold restarts
   the scene.
+- **Paced scenes (`scene_paced1`) on e-paper** (the platform's
+  `docs/scenes_paced.md`): still pages the server draws in the board's own
+  format (`bmp1` or `wgn6`, what `/pic` serves), kept in LittleFS by their
+  sha256, and the runtime's logic without drawing (`paced_player.cpp`,
+  `WIGNET_SCENES_PACED`, around the same `scene_runtime.cpp`). Sounds,
+  `set`, `report` and `end` run at once; a page costs a redraw. The board
+  keeps the rules: after every redraw (a page, `/pic`, a slide) the screen
+  is locked until the refresh is over plus 5 s, and pages asked for
+  meanwhile collapse into the last one; `after:`, `idle:` and `every:` count
+  from the end of the refresh (the runtime's clock stands still while the
+  page it asked for is not on screen); buttons are read in their own task,
+  so a press during a refresh is never lost. It plays only while the board
+  stays awake (mains, USB, or a board without a battery); on battery the
+  start page (`/pic`) stays, inert. The server knows each panel's redraw
+  time; `rd=<ms>` would override it and is not sent. On the 7.5" driver
+  board the pages share the 384 KB LittleFS partition: about six 1-bit
+  pages.
 - **A colour LCD draws its own screens** (boot, Wi-Fi setup, Wi-Fi OK, and
   with `welcome_local1` the Welcome page) with its fonts, flush left, #F7F2E8
   on black; the server sends what a screen says, not a picture of it, where

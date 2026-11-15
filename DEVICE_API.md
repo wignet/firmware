@@ -127,6 +127,13 @@ ignored without making `/schedule` fail.
   The bundle is `GET /scene/<id>.json` and `GET /scene/<id>/<asset>.bin`
   (`&z=1` asks for a zlib stream); `report` values go to `POST /input`, all
   with `?mac=`. See [docs/scenes.md](docs/scenes.md).
+- **Paced scenes (`scene_paced1`, e-paper).** The same `in=`, `sev=`,
+  `scene` and `sceneEvents`, and the same `/input`. The manifest has
+  `"paced": 1`, a `format` (`bmp1` or `wgn6`) and `pages` (`{page, file,
+  bytes, sha256}`), each `GET /scene/<id>/page<n>.bin?mac=`, the bytes
+  `/pic` would serve; page 1 is `/pic`. An optional `rd=<ms>` declares the
+  board's own full-redraw time; without it the server uses its table. See
+  the platform's `docs/scenes_paced.md` for the rules the board keeps.
 
 ## RGB / HDMI readers
 

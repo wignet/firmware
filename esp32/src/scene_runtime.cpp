@@ -2,9 +2,10 @@
  * The scene runtime 2 (scene_runtime.h, docs/scene_runtime.md): the C++ twin
  * of backoffice/scene_runtime.py's Runtime, step for step.
  */
-// Only scene-playing firmware needs this runtime and ArduinoJson. Keep the
+// Only scene-playing firmware (scene_player.cpp, paced_player.cpp) needs
+// this runtime and ArduinoJson. Keep the
 // standalone host build available for the platform's agreement checks.
-#if !defined(ARDUINO) || (defined(WIGNET_SCENES) && !defined(WIGNET_LVGL_SPIKE))
+#if !defined(ARDUINO) || (defined(WIGNET_SCENES) && !defined(WIGNET_LVGL_SPIKE)) || defined(WIGNET_SCENES_PACED)
 #include "scene_runtime.h"
 
 #include <math.h>
