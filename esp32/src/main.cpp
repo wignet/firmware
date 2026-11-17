@@ -677,6 +677,9 @@ int fetchSchedule() {
   // WGN6, with the runtime's logic (paced_player.cpp). in= its buttons,
   // sev= the last scene event received. With audio_out its sounds play.
   url += "%2Cscene_paced1";
+  // scene_volume1: a scene's bound volume, looping sounds and silence
+  // (audio_hal.cpp setSceneVolume, startCue loop).
+  url += "%2Cscene_volume1";
   url += PacedPlayer::scheduleParams();
   if (panelRedrawMs) url += "&rd=" + String(panelRedrawMs); // measured, above
 #endif
@@ -730,6 +733,11 @@ int fetchSchedule() {
   // scene_3mb: a bundle of up to 3 MB held raw (scene_player.cpp
   // BUNDLE_MAX_BYTES); without it the server keeps scenes to 1.5 MB.
   url += "%2Cscene_3mb";
+#if defined(WIGNET_HAS_AUDIO)
+  // scene_volume1: a scene's bound volume, looping sounds and silence
+  // (audio_hal.cpp setSceneVolume, startCue loop).
+  url += "%2Cscene_volume1";
+#endif
 #if defined(WIGNET_POWER_AXP2101) || defined(WIGNET_BATTERY_ADC_PIN)
   // scene_battery1: battery.percent, .charging, .plugged, .known in a
   // scene's expressions (PowerHAL::read, scene_player.cpp tickScene).

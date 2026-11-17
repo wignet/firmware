@@ -40,6 +40,7 @@ constexpr uint32_t SHORT_MAX_MS = 600;    // shorter: short; longer: long
 constexpr uint32_t EXIT_HOLD_MS = 5000;   // the way out of a scene, never the scene's
 constexpr uint32_t AFTER_SOUND_MS = 1000; // a press just after a ring is still the ring's
 constexpr uint32_t SOUND_MAX_MS = 10000;
+constexpr uint32_t LOOP_MAX_MS = 3600000; // a looping sound: until silence, at most an hour
 constexpr size_t REPORTS_MAX = 32;
 constexpr uint32_t RETRY_MS = 30000;
 // Flash left free besides the pages: LittleFS needs a few blocks to write.
@@ -57,6 +58,7 @@ PacedPlayer::Hooks hooks;
 struct Sound {
   std::string tune;
   uint8_t volume = 50;
+  bool loop = false; // played until silence or another sound (scene_volume1)
 };
 
 struct Report {
@@ -154,10 +156,19 @@ void playSound(const std::string &name) {
     return;
   }
   pendingSound.clear();
-  if (!AudioHAL::startCue(found->second.tune.c_str(), found->second.volume, SOUND_MAX_MS))
+  if (!AudioHAL::startCue(found->second.tune.c_str(), found->second.volume,
+                         found->second.loop ? LOOP_MAX_MS : SOUND_MAX_MS, found->second.loop))
     Serial.printf("[Paced] Sound %s not played\n", name.c_str());
 #else
   (void)name;
+#endif
+}
+
+// `silence` (scene_volume1): the scene's sound stops; an alarm never does.
+void silenceSound() {
+#if defined(WIGNET_HAS_AUDIO)
+  pendingSound.clear();
+  if (AudioHAL::isPlaying() && !AudioHAL::isRinging()) AudioHAL::stop();
 #endif
 }
 
@@ -174,8 +185,18 @@ public:
   void move(int, int) override {}
   void wander(int, bool) override {}
   void show(int, bool) override {}
-  void prop(SceneRuntime::Target, SceneRuntime::Prop, float) override {}
+  // The sounds' volume (scene_volume1): pictures never bind on a paced screen.
+  void prop(SceneRuntime::Target target, SceneRuntime::Prop prop, float value) override {
+#if defined(WIGNET_HAS_AUDIO)
+    if (target.kind == 's' && prop == SceneRuntime::VOLUME) AudioHAL::setSceneVolume(value);
+#else
+    (void)target;
+    (void)prop;
+    (void)value;
+#endif
+  }
   void sound(const std::string &name) override { playSound(name); }
+  void silence() override { silenceSound(); }
   void report(const std::string &value, const std::string &event, int page) override {
     if (reports.size() < REPORTS_MAX) {
       Report report;
@@ -420,6 +441,7 @@ Loaded load(const String &id, const String &url, std::unique_ptr<Scene> &out) {
     Sound sound;
     sound.tune = item.value()["tune"] | "";
     sound.volume = item.value()["volume"] | 50;
+    sound.loop = item.value()["loop"] | false;
     next->sounds[item.key().c_str()] = sound;
   }
   // Each page by its sha256: a page already in flash (the same scene again,
@@ -496,6 +518,9 @@ void takeDown() {
 
 void putUp(std::unique_ptr<Scene> next) {
   takeDown();
+#if defined(WIGNET_HAS_AUDIO)
+  AudioHAL::setSceneVolume(100); // until the scene binds its own
+#endif
   scene = std::move(next);
   restorePath = "";
   scene->runtime.setHost(&host);

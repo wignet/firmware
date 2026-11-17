@@ -55,6 +55,10 @@ void buttonMode(int pin, int mode) {
 }
 bool buttonIs(int pin, int level) { return pin >= 0 && digitalRead(pin) == level; }
 
+// A scene's volume (scene_volume1), 0-100 % as 1/32768: scales its cues and
+// tone, never an alarm. Any task may set it; read once per buffer.
+volatile int32_t sceneGainQ15 = 32768;
+
 // Alarm loudness while ringing: rises from silence to the alarm's volume over
 // the fade-in, then holds. Amplitude follows the square of elapsed progress
 // because loudness is not linear in amplitude: a straight amplitude ramp is
@@ -65,12 +69,14 @@ struct Ringing {
   uint32_t fadeInMs;
   uint32_t endMs; // fade-in plus the full-volume duration, from startedMs
   uint8_t volume;
+  bool scaled; // a scene's cue: times the scene's volume, as it changes
 
   bool expired() const { return millis() - startedMs >= endMs; }
 
   // Gain in 1/32768 of full scale.
   int32_t gainQ15() const {
-    const int32_t full = static_cast<int32_t>(volume) * 32768 / 100;
+    int32_t full = static_cast<int32_t>(volume) * 32768 / 100;
+    if (scaled) full = static_cast<int32_t>((static_cast<int64_t>(full) * sceneGainQ15) >> 15);
     const uint32_t elapsed = millis() - startedMs;
     if (fadeInMs == 0 || elapsed >= fadeInMs) return full;
     const int64_t progress = static_cast<int64_t>(elapsed) * 32768 / fadeInMs;
@@ -83,8 +89,10 @@ struct Ringing {
 bool (*extraStop)() = nullptr;
 // Set by AudioHAL::stop() from another task.
 volatile bool stopFlag = false;
-// A scene's cue: played once, and the buttons are the scene's, not the sound's.
+// A scene's cue: played once (or looped, cueLoop), and the buttons are the
+// scene's, not the sound's.
 bool cueMode = false;
+bool cueLoop = false;
 
 // Measured on every buffer written (noteWrite), for AudioHAL::lastStats().
 AudioHAL::Stats stats;
@@ -462,7 +470,7 @@ bool ring(const char *path, const char *tune, uint8_t volume,
   pwrPulses = 0;
   Ringing ringing = {millis(), fadeInSec * 1000U,
                      (fadeInSec + maxDurationSec) * 1000U,
-                     min(volume, static_cast<uint8_t>(100))};
+                     min(volume, static_cast<uint8_t>(100)), cueMode};
 
   // The tune text must outlive playback: the synth reads it as it plays.
   bool tuneReady = false;
@@ -471,8 +479,9 @@ bool ring(const char *path, const char *tune, uint8_t volume,
     tuneReady = tuneSynth.begin(tune, strlen(tune), SAMPLE_RATE, &error);
     if (!tuneReady) {
       Serial.printf("[Audio] Tune refused (%s); ringing %s\n", error, path);
-    } else if (cueMode) {
+    } else if (cueMode && !cueLoop) {
       // Once: one loop of the tune, if shorter than the cue's limit.
+      // A looping cue plays until stopped (or its limit).
       const uint64_t loopMs = tuneSynth.loopSamples() * 1000ULL / SAMPLE_RATE;
       if (loopMs < ringing.endMs) ringing.endMs = static_cast<uint32_t>(loopMs);
     }
@@ -571,6 +580,7 @@ struct Job {
   bool cue = false;
   uint32_t cueMs = 0;
   bool tone = false;
+  bool loop = false; // a cue that loops until stopped
   AudioHAL::Wave wave = AudioHAL::Wave::Triangle;
   uint32_t glideMs = 0;
 };
@@ -631,7 +641,10 @@ bool toneRing(AudioHAL::Wave wave, uint8_t volume, uint32_t glideMs) {
   bool stopping = false;
   for (;;) {
     if (!stopping && stopRequested()) stopping = true;
-    level = stopping ? max<int32_t>(0, level - ramp) : min(full, level + ramp);
+    // The scene's volume as it is now; a change glides there at the same ramp.
+    const int32_t target = static_cast<int32_t>((static_cast<int64_t>(full) * sceneGainQ15) >> 15);
+    level = stopping ? max<int32_t>(0, level - ramp)
+            : level < target ? min(target, level + ramp) : max(target, level - ramp);
     hz += (toneTargetHz - hz) * step;
     const uint32_t increment = static_cast<uint32_t>(hz * 4294967296.0f / SAMPLE_RATE);
     for (size_t i = 0; i < SAMPLES; ++i, phase += increment) {
@@ -657,6 +670,7 @@ bool toneRing(AudioHAL::Wave wave, uint8_t volume, uint32_t glideMs) {
 
 void audioTask(void *) {
   cueMode = job.cue || job.tone;
+  cueLoop = job.cue && job.loop;
   if (job.tone) {
     stats.played = toneRing(job.wave, job.volume, job.glideMs);
   } else if (job.cue) {
@@ -666,6 +680,7 @@ void audioTask(void *) {
     ring(job.path.c_str(), job.tune.c_str(), job.volume, job.maxDurationSec, job.fadeInSec);
   }
   cueMode = false;
+  cueLoop = false;
   // Bytes never touched: how much of AUDIO_STACK a real ring left spare.
   Serial.printf("[Audio] Task stack spare: %u bytes\n",
                 static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
@@ -681,9 +696,11 @@ constexpr BaseType_t AUDIO_CORE = 1;
 constexpr uint32_t AUDIO_STACK = 12288; // bytes; see "Task stack spare" in the log
 
 bool startJob(const char *path, const char *tune, uint8_t volume,
-              uint32_t maxDurationSec, uint32_t fadeInSec, uint32_t cueMs = 0, bool tone = false) {
+              uint32_t maxDurationSec, uint32_t fadeInSec, uint32_t cueMs = 0, bool tone = false,
+              bool loop = false) {
   if (playing) return false;
   job.tone = tone;
+  job.loop = loop;
   job.cue = cueMs > 0;
   job.cueMs = cueMs;
   job.path = path ? path : "";
@@ -732,9 +749,14 @@ bool startTest(const char *path, const char *tune, uint8_t volume, uint32_t seco
   return startJob(path, tune, volume, constrain(seconds, 1U, 3600U), 0);
 }
 
-bool startCue(const char *tune, uint8_t volume, uint32_t maxMs) {
+bool startCue(const char *tune, uint8_t volume, uint32_t maxMs, bool loop) {
   if (!tune || !*tune) return false;
-  return startJob("", tune, volume, 0, 0, constrain(maxMs, 1U, 10000U));
+  return startJob("", tune, volume, 0, 0, constrain(maxMs, 1U, loop ? 3600000U : 10000U), false, loop);
+}
+
+void setSceneVolume(float percent) {
+  const float clamped = percent < 0 ? 0 : percent > 100 ? 100 : percent;
+  sceneGainQ15 = static_cast<int32_t>(clamped * 32768.0f / 100.0f);
 }
 
 bool isRinging() { return playing && !job.cue && !job.tone; }
@@ -818,7 +840,8 @@ bool playTest(const char *, uint8_t, uint32_t, bool (*)()) { return false; }
 bool startAlarm(const char *, const char *, uint8_t, uint32_t, uint32_t) { return false; }
 bool startTest(const char *, const char *, uint8_t, uint32_t) { return false; }
 bool isPlaying() { return false; }
-bool startCue(const char *, uint8_t, uint32_t) { return false; }
+bool startCue(const char *, uint8_t, uint32_t, bool) { return false; }
+void setSceneVolume(float) {}
 bool isRinging() { return false; }
 bool startTone(Wave, float, uint8_t, uint32_t) { return false; }
 void setToneHz(float) {}

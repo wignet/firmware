@@ -30,13 +30,14 @@ const struct {
            {">=", GE}, {"==", EQ}, {"!=", NE}, {"&&", AND}, {"||", OR}, {"!", NOT}, {"neg", NEG}, {"?", COND},
            {"min", MIN}, {"max", MAX}, {"clamp", CLAMP}, {"floor", FLOOR}, {"round", ROUND}, {"abs", ABS},
            {"lerp", LERP}, {"blend", BLEND}, {"len", LEN}, {"idx", IDX}, {"rand", RAND}};
-const char *PROPS[PROP_COUNT] = {"dx", "dy", "frame", "rotation", "visible", "opacity", "w", "h", "color", "pitch", "on"};
+const char *PROPS[PROP_COUNT] = {"dx", "dy", "frame", "rotation", "visible", "opacity", "w", "h", "color", "pitch", "on",
+                                 "volume"};
 
 // What a program reads: variables in bits 0-15, then time, tilt, page, battery.
 constexpr uint32_t TIME = 1u << 16, TILT = 1u << 17, PAGE = 1u << 18, BATTERY = 1u << 19;
 constexpr int VARS_MAX = 16, STACK = 64, WHEN_DEPTH = 8;
 
-enum Verb : uint8_t { SET, PAGE_TO, REPORT, END, STATE, MOVE, WANDER, SHOW, HIDE, SOUND };
+enum Verb : uint8_t { SET, PAGE_TO, REPORT, END, STATE, MOVE, WANDER, SHOW, HIDE, SOUND, SILENCE };
 
 bool parseProgram(JsonArrayConst list, Program &out, uint32_t &deps, std::string &error) {
   for (JsonVariantConst item : list) {
@@ -149,6 +150,7 @@ bool Runtime::load(JsonObjectConst manifest, std::string &error) {
   for (JsonObjectConst page : manifest["pages"].as<JsonArrayConst>())
     if (!bind(page["bind"].as<JsonObjectConst>(), 'p', page["page"] | 0)) return false;
   if (!bind(manifest["tone"]["bind"].as<JsonObjectConst>(), 't', 0)) return false;
+  if (!bind(manifest["sound"]["bind"].as<JsonObjectConst>(), 's', 0)) return false;
   int moves = 0;
   for (JsonObjectConst item : manifest["on"].as<JsonArrayConst>()) {
     Entry entry;
@@ -209,6 +211,8 @@ bool Runtime::load(JsonObjectConst manifest, std::string &error) {
       } else if (verb == "sound") {
         action.verb = SOUND;
         action.text = op[1] | "";
+      } else if (verb == "silence") {
+        action.verb = SILENCE;
       } else {
         error = "unknown action " + verb;
         return false;
@@ -627,6 +631,9 @@ uint32_t Runtime::run(const Entry &entry, const std::string &event) {
       break;
     case SOUND:
       if (host_) host_->sound(action.text);
+      break;
+    case SILENCE:
+      if (host_) host_->silence();
       break;
     }
   }

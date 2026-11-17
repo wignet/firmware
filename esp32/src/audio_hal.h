@@ -31,10 +31,16 @@ bool startTest(const char *path, const char *tune, uint8_t volume, uint32_t seco
 bool isPlaying();
 
 // A scene's sound (docs/scenes.md "Sounds"): the MML `tune` played once from
-// the first sample at `volume`, at most `maxMs`, in the same task as a ring.
-// Buttons do not stop a cue (they stay the scene's); stop() does. False if a
-// sound is already playing.
-bool startCue(const char *tune, uint8_t volume, uint32_t maxMs);
+// the first sample at `volume`, at most `maxMs` (10 s), in the same task as a
+// ring; with `loop`, over and over until stop() (at most `maxMs`, up to an
+// hour). Buttons do not stop a cue (they stay the scene's); stop() does.
+// False if a sound is already playing.
+bool startCue(const char *tune, uint8_t volume, uint32_t maxMs, bool loop = false);
+
+// A scene's volume (scene_volume1), 0-100: scales its cues and its tone as
+// they play, within one buffer (10 ms). Never an alarm's. 100 when no scene
+// sets it; any task may call it.
+void setSceneVolume(float percent);
 // True while an alarm or a pushed sound rings, not a cue: the press is the ring's.
 bool isRinging();
 
