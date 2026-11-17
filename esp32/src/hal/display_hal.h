@@ -8,10 +8,11 @@
  * Each hardware target implements these functions in its own .cpp file.
  */
 
+#if !defined(WIGNET_DISPLAY_RGB)
 // Enable GxEPD2_GFX base class for polymorphism - MUST be before includes
 #define ENABLE_GxEPD2_GFX 1
-
 #include <GxEPD2_BW.h>
+#endif
 
 namespace DisplayHAL {
 
@@ -31,7 +32,9 @@ void hibernate();
  * Get pointer to the display object for drawing operations.
  * The underlying type is hardware-specific but always extends GxEPD2_GFX.
  */
+#if !defined(WIGNET_DISPLAY_RGB)
 GxEPD2_GFX *getDisplay();
+#endif
 
 /**
  * Get display width in pixels.

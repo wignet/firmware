@@ -15,7 +15,13 @@
 #include "hal/display_hal.h"
 #include "wifi_provisioning.h"
 #include <Arduino.h>
+#if !defined(WIGNET_DISPLAY_RGB)
 #include <GxEPD2_BW.h>
+#else
+#include <Adafruit_GFX.h>
+static constexpr uint16_t GxEPD_BLACK = 0;
+static constexpr uint16_t GxEPD_WHITE = 1;
+#endif
 #include "usb_console.h"
 #include "board.h"
 
@@ -119,8 +125,60 @@ using WignetWebServer = ESP8266WebServer;
 using WignetWebServer = WebServer;
 #endif
 
-// Convenience macro for display access (dereferences the HAL pointer)
+#if defined(WIGNET_DISPLAY_RGB)
+// Adafruit_GFX writes directly into the LCD's RGB565 framebuffer. The small
+// paging surface preserves the common call sites while each LCD screen is
+// committed once, after drawing is complete.
+class RgbFrameGfx : public Adafruit_GFX {
+public:
+  RgbFrameGfx()
+      : Adafruit_GFX(DisplayHAL::getWidth(), DisplayHAL::getHeight()) {}
+  void drawPixel(int16_t x, int16_t y, uint16_t color) override {
+    uint16_t *pixels = DisplayHAL::frame();
+    if (!pixels || x < 0 || y < 0 || x >= width() || y >= height()) return;
+    int fx = x, fy = y;
+    switch (getRotation()) {
+    case 1: fx = DisplayHAL::getWidth() - 1 - y; fy = x; break;
+    case 2:
+      fx = DisplayHAL::getWidth() - 1 - x;
+      fy = DisplayHAL::getHeight() - 1 - y;
+      break;
+    case 3:
+      fx = y;
+      fy = DisplayHAL::getHeight() - 1 - x;
+      break;
+    }
+    const uint16_t rgb = color == 1 ? 0xFFFF : (color == 0 ? 0x0000 : color);
+    pixels[fy * DisplayHAL::getWidth() + fx] = (rgb << 8) | (rgb >> 8);
+  }
+  void fillScreen(uint16_t color) override {
+    const uint16_t rgb = color == 1 ? 0xFFFF : (color == 0 ? 0x0000 : color);
+    const uint16_t stored = (rgb << 8) | (rgb >> 8);
+    uint16_t *pixels = DisplayHAL::frame();
+    if (!pixels) return;
+    for (int i = 0; i < DisplayHAL::getWidth() * DisplayHAL::getHeight(); ++i)
+      pixels[i] = stored;
+  }
+  void setTextColor(uint16_t color) {
+    Adafruit_GFX::setTextColor(color == 1 ? 0xFFFF : (color == 0 ? 0x0000 : color));
+  }
+  void setFullWindow() {}
+  void firstPage() { pagePending = true; }
+  bool nextPage() {
+    if (!pagePending) return false;
+    pagePending = false;
+    DisplayHAL::showFrame();
+    return false;
+  }
+private:
+  bool pagePending = false;
+};
+static RgbFrameGfx rgbDisplay;
+#define display rgbDisplay
+#else
+// E-paper display access (RGB targets use the framebuffer adapter above).
 #define display (*DisplayHAL::getDisplay())
+#endif
 
 int getDefaultDisplayRotation() {
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)

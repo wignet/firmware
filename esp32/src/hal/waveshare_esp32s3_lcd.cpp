@@ -9,19 +9,19 @@
  *   buffer, 320x240, turned once onto the panel (docs/lcd_2.md). Pins from
  *   Waveshare's ESP32-S3-LCD-2-Demo.zip (ESP-IDF 06_lvgl_example).
  *
- * An LCD is not an e-paper panel, but main.cpp draws its own screens
- * (startup, provisioning, text) through GxEPD2. A GxEPD2 driver here takes
- * those 1-bit pages and writes them into an upright RGB565 frame; a PNG is
- * decoded straight into the same frame (main.cpp, displayPngFromStream).
+ * An LCD is not an e-paper panel. main.cpp draws directly through Adafruit_GFX
+ * into the upright RGB565 frame; PNGs decode into that same frame.
  * showFrame() sends it to the panel turned by the accelerometer's quarter
  * turn (orientation_hal.cpp), so turning never needs a redraw, and through
  * this panel's colour calibration (below), in its 18-bit mode.
  */
 
-#define ENABLE_GxEPD2_GFX 1
 #include "display_hal.h"
+#if !defined(WIGNET_DISPLAY_RGB)
+#define ENABLE_GxEPD2_GFX 1
 #include <GxEPD2_BW.h>
 #include <GxEPD2_EPD.h>
+#endif
 #include <SPI.h>
 #include <esp_heap_caps.h>
 #include <math.h>
@@ -212,7 +212,8 @@ static void pushFrame() {
   xSemaphoreGiveRecursive(panelLock);
 }
 
-// ============ GxEPD2 driver: 1-bit pages into the upright frame ============
+#if !defined(WIGNET_DISPLAY_RGB)
+// ============ E-paper compatibility driver ============
 
 class GxEPD2_LCD_Wignet : public GxEPD2_EPD {
 public:
@@ -354,6 +355,7 @@ private:
 
 static GxEPD2_BW<GxEPD2_LCD_Wignet, GxEPD2_LCD_Wignet::HEIGHT>
     display(GxEPD2_LCD_Wignet{});
+#endif
 
 namespace DisplayHAL {
 
@@ -375,16 +377,19 @@ void init() {
   // 1.54"). MISO is not used: the 2"'s microSD keeps GPIO40 to itself.
   SPI.begin(LCD_SCLK, -1, LCD_MOSI, LCD_CS);
   lcdInit();
+#if !defined(WIGNET_DISPLAY_RGB)
   display.init(0);
-  // Always upright: the turn is applied on the way to the panel.
   display.setRotation(0);
+#endif
   Serial.println("[HAL] LCD initialized.");
 }
 
 // Plugged in for now: nothing to put to sleep.
 void hibernate() {}
 
+#if !defined(WIGNET_DISPLAY_RGB)
 GxEPD2_GFX *getDisplay() { return &display; }
+#endif
 
 int getWidth() { return FRAME_W; }
 
