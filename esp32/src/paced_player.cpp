@@ -143,6 +143,12 @@ std::vector<Report> reports;
 String stopReason; // set by the task or the runtime, acted on by service()
 bool restartWanted = false; // with stopReason: a slide's hold, played again from its first page
 std::string pendingSound;
+bool soundLoops = false; // the scene's sound playing now loops: it never outlives the scene
+// A pushed scene that ended itself: the server is told (`"ended": true` on
+// /input), ends the push, and /pic serves the slides again. Its start page is
+// put back only if the server did not end it.
+String endedToTell;
+String restoreUnlessEnded;
 
 void playSound(const std::string &name) {
 #if defined(WIGNET_HAS_AUDIO)
@@ -156,6 +162,7 @@ void playSound(const std::string &name) {
     return;
   }
   pendingSound.clear();
+  soundLoops = found->second.loop;
   if (!AudioHAL::startCue(found->second.tune.c_str(), found->second.volume,
                          found->second.loop ? LOOP_MAX_MS : SOUND_MAX_MS, found->second.loop))
     Serial.printf("[Paced] Sound %s not played\n", name.c_str());
@@ -499,7 +506,9 @@ Loaded load(const String &id, const String &url, std::unique_ptr<Scene> &out) {
 // ----------------------------------------------------------- on and off --
 // Both under the lock.
 
-void takeDown() {
+// keepSound: a scene that ends itself lets its last sound finish (a "bye"
+// beep), unless that sound loops.
+void takeDown(bool keepSound = false) {
   if (!scene) return;
   // One of its other pages on screen: the start page, what /pic shows, goes back.
   const String shown = shownFile();
@@ -507,7 +516,9 @@ void takeDown() {
   restorePath = shown.length() && shown != start ? start : "";
 #if defined(WIGNET_HAS_AUDIO)
   pendingSound.clear();
-  if (AudioHAL::isPlaying() && !AudioHAL::isRinging()) AudioHAL::stop(); // its cue goes with it
+  if (!keepSound || soundLoops) {
+    if (AudioHAL::isPlaying() && !AudioHAL::isRinging()) AudioHAL::stop(); // its cue goes with it
+  }
 #endif
   // The file stands for what is shown: /pic again for the start page.
   if (shownPath == start) shownPath = "";
@@ -655,9 +666,16 @@ void service() {
       Serial.printf("[Paced] Ended by %s%s\n", stopReason.c_str(),
                     restartWanted ? ": starting the slide again" : "");
       // A slide is not remembered as ended: the next pass loads it again.
-      if (scene && !restartWanted) remember(endedId, endedRtc, scene->id);
+      const bool ended = scene && !restartWanted;
+      const bool pushed = ended && !scene->slide;
+      if (ended) remember(endedId, endedRtc, scene->id);
+      if (pushed) endedToTell = scene->id;
       restartWanted = false;
-      takeDown();
+      takeDown(ended);
+      if (pushed) {
+        restoreUnlessEnded = restorePath;
+        restorePath = "";
+      }
     }
     if (scene && wantedId != scene->id) {
       Serial.println("[Paced] No longer named by /schedule");
@@ -718,14 +736,22 @@ void service() {
   }
   std::vector<Report> outgoing;
   String id;
+  bool ended = false;
   {
     Locked held;
+    if (WiFi.status() != WL_CONNECTED) return;
     outgoing.swap(reports);
     if (scene) id = scene->id;
+    if (endedToTell.length() && !scene) {
+      id = endedToTell;
+      ended = true;
+      endedToTell = "";
+    }
   }
-  if (outgoing.empty() || id.isEmpty() || WiFi.status() != WL_CONNECTED) return;
+  if ((outgoing.empty() && !ended) || id.isEmpty()) return;
   JsonDocument body;
   body["publication_id"] = id;
+  if (ended) body["ended"] = true;
   JsonArray events = body["events"].to<JsonArray>();
   for (const Report &report : outgoing) {
     JsonObject item = events.add<JsonObject>();
@@ -740,8 +766,25 @@ void service() {
   if (http.begin(client, baseUrl() + "/input?mac=" + WiFi.macAddress())) {
     http.addHeader("Content-Type", "application/json");
     const int code = http.POST(json);
-    Serial.printf("[Paced] Sent %u report(s): %d\n", static_cast<unsigned>(outgoing.size()), code);
+    bool pushEnded = false;
+    if (ended && code == 200) {
+      JsonDocument answer;
+      if (!deserializeJson(answer, http.getString())) pushEnded = answer["push_ended"] | false;
+    }
+    Serial.printf("[Paced] Sent %u report(s)%s: %d\n", static_cast<unsigned>(outgoing.size()),
+                  ended ? (pushEnded ? ", ended: the push is over" : ", ended") : "", code);
     http.end();
+    if (ended) {
+      Locked held;
+      // Not ended by the server (a slide, an older server, no answer): the
+      // start page, what /pic still serves, goes back on screen.
+      if (!pushEnded && !scene && restoreUnlessEnded.length()) restorePath = restoreUnlessEnded;
+      restoreUnlessEnded = "";
+    }
+  } else if (ended) {
+    Locked held;
+    if (!scene && restoreUnlessEnded.length()) restorePath = restoreUnlessEnded;
+    restoreUnlessEnded = "";
   }
 }
 
@@ -762,7 +805,7 @@ bool keepsAwake() {
   if (!lock || !filesystemReady) return false;
   Locked held;
   // Still up, or its start page still to put back before sleeping.
-  if (scene || restorePath.length()) return true;
+  if (scene || restorePath.length() || endedToTell.length() || restoreUnlessEnded.length()) return true;
   return wantedId.length() && wantedId != endedId && wantedId != refusedId && (!hooks.awake || hooks.awake());
 }
 
