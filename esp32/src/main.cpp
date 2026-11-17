@@ -18,6 +18,7 @@
 #include <GxEPD2_BW.h>
 #include "usb_console.h"
 #include "board.h"
+#include "paced_player.h"
 
 #if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6) || defined(WIGNET_BATTERY_ADC_PIN) || \
     defined(WIGNET_POWER_AXP2101)
@@ -615,6 +616,34 @@ bool decodeAndDisplayImage(Stream &client, bool allowColor,
   return false;
 }
 
+#if defined(WIGNET_PACED_PLAYER)
+// The panel's own full-redraw time, measured: the longest BUSY period of a
+// full refresh (GxEPD2 calls this while it waits on BUSY, every ~1 ms). Sent
+// as rd= so the platform paces scenes on this panel's real figure
+// (docs/scenes_paced.md); the last measure, kept across deep sleep.
+static uint32_t panelBusyFromMs = 0, panelBusyLastMs = 0, panelBusyLongestMs = 0;
+RTC_DATA_ATTR uint32_t panelRedrawMs = 0;
+
+static void onPanelBusy(const void *) {
+  const uint32_t now = millis();
+  if (!panelBusyFromMs || now - panelBusyLastMs > 20) panelBusyFromMs = now; // a new BUSY period
+  panelBusyLastMs = now;
+  if (now - panelBusyFromMs > panelBusyLongestMs) panelBusyLongestMs = now - panelBusyFromMs;
+  delay(1); // what GxEPD2 does without a callback: other tasks run meanwhile
+}
+
+// After a full redraw: its BUSY period is the panel's redraw time.
+static void notePanelRefresh() {
+  // Shorter than a second is not a full refresh of these panels (a lost
+  // callback, a partial update): not believed.
+  if (panelBusyLongestMs >= 1000) {
+    panelRedrawMs = panelBusyLongestMs;
+    Serial.printf("[Paced] Panel refresh (BUSY) %lu ms\n", static_cast<unsigned long>(panelRedrawMs));
+  }
+  panelBusyLongestMs = 0;
+}
+#endif
+
 // ============ Schedule Functions ============
 
 int fetchSchedule() {
@@ -642,6 +671,14 @@ int fetchSchedule() {
 #if defined(WIGNET_OTA_CAPABLE)
   // ota1: this board installs firmware offered on /schedule (docs/ota.md).
   url += "%2Cota1";
+#endif
+#if defined(WIGNET_PACED_PLAYER)
+  // scene_paced1: plays paced scenes, still pages drawn by the server as
+  // WGN6, with the runtime's logic (paced_player.cpp). in= its buttons,
+  // sev= the last scene event received. With audio_out its sounds play.
+  url += "%2Cscene_paced1";
+  url += PacedPlayer::scheduleParams();
+  if (panelRedrawMs) url += "&rd=" + String(panelRedrawMs); // measured, above
 #endif
   url += PowerHAL::queryParams();
 #elif defined(WIGNET_DISPLAY_RGB)
@@ -731,9 +768,20 @@ int fetchSchedule() {
   // (partitions/ota_4m.csv): this image flashed alone over the old table
   // can't hold a larger one (docs/ota.md "Board ids").
   {
+    String caps;
     const esp_partition_t *next = esp_ota_get_next_update_partition(nullptr);
-    if (next && next->size >= 0x1c0000) url += "&caps=v1%3Aota1";
+    if (next && next->size >= 0x1c0000) caps += "%2Cota1";
+#if defined(WIGNET_PACED_PLAYER)
+    // scene_paced1: plays paced scenes, still 1-bit pages drawn by the
+    // server, with the runtime's logic (paced_player.cpp).
+    caps += "%2Cscene_paced1";
+#endif
+    if (caps.length()) url += "&caps=v1%3A" + caps.substring(3);
   }
+#if defined(WIGNET_PACED_PLAYER)
+  url += PacedPlayer::scheduleParams(); // in= its button, sev= scene events
+  if (panelRedrawMs) url += "&rd=" + String(panelRedrawMs); // measured panel refresh
+#endif
 #endif
   // The Wi-Fi networks this Wignet knows, never passwords (docs/wifi.md).
   {
@@ -788,6 +836,9 @@ int fetchSchedule() {
 #endif
 #if defined(WIGNET_SCENE_PLAYER)
     ScenePlayer::onSchedule(payload);
+#endif
+#if defined(WIGNET_PACED_PLAYER)
+    PacedPlayer::onSchedule(payload);
 #endif
 
 #if defined(WIGNET_OTA_CLIENT)
@@ -1101,7 +1152,17 @@ ImageRequestResult fetchWignetRepresentation(const String &url,
     // stall ("Failed to read complete BMP into PSRAM"), costing a retry.
     stream->setTimeout(IMAGE_READ_TIMEOUT_MS);
     const int responseLength = http.getSize();
+    const uint32_t drawStartedMs = millis();
+#if defined(WIGNET_PACED_PLAYER)
+    panelBusyLongestMs = 0;
+#endif
     if (decodeAndDisplayImage(*stream, preferColor, responseLength, info)) {
+#if defined(WIGNET_PACED_PLAYER)
+      notePanelRefresh();
+      PacedPlayer::onRedraw(drawStartedMs); // rule 1: the lock covers /pic too
+#else
+      (void)drawStartedMs;
+#endif
 #if defined(WIGNET_DISPLAY_RGB)
       lcdScreen = LcdScreen::None; // a platform page now, not one of ours
 #endif
@@ -2133,6 +2194,40 @@ void handleWiFiReset() {
 
 // ============ Setup & Loop ============
 
+#if defined(WIGNET_PACED_PLAYER)
+// A paced scene's page, drawn from flash as /pic is (PacedPlayer::Hooks).
+static bool pacedDraw(Stream &file, int length) {
+  DecodedImageInfo info;
+  panelBusyLongestMs = 0;
+#if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
+  const bool drawn = decodeAndDisplayImage(file, true, length, info);
+#else
+  const bool drawn = decodeAndDisplayImage(file, false, length, info);
+#endif
+  if (drawn) notePanelRefresh();
+  return drawn;
+}
+
+// A scene plays only while the board stays awake; on battery it shows its
+// start page, inert (the platform's docs/scenes_paced.md "Decisions").
+static bool pacedAwake() {
+#if defined(TARGET_WAVESHARE_PHOTOPAINTER_73E6)
+  return lastExternal == 1 || usbAwake;
+#else
+  return true; // the driver board has no battery: it runs on USB power
+#endif
+}
+#endif
+
+// A paced scene plays: no deep sleep, so its buttons work.
+static bool sceneKeepsAwake() {
+#if defined(WIGNET_PACED_PLAYER)
+  return PacedPlayer::keepsAwake();
+#else
+  return false;
+#endif
+}
+
 void setup() {
   // On battery the board stays on only once the firmware holds it: before
   // anything else, while PWR may still be held down (power_hold_hal.cpp).
@@ -2221,6 +2316,15 @@ void setup() {
 #endif
 #if defined(WIGNET_SCENE_PLAYER)
   ScenePlayer::begin(); // the panel stays the loop's until a scene plays
+#endif
+#if defined(WIGNET_PACED_PLAYER)
+  {
+    PacedPlayer::Hooks hooks;
+    hooks.draw = pacedDraw;
+    hooks.awake = pacedAwake;
+    PacedPlayer::begin(hooks); // after the alarm's LittleFS mount
+    DisplayHAL::getDisplay()->epd2.setBusyCallback(onPanelBusy);
+  }
 #endif
 #if defined(WIGNET_HAS_IMU)
   // From here on the screen follows the board, Wi-Fi portal included; the
@@ -2402,7 +2506,7 @@ void loop() {
 #if defined(WIGNET_BENCH_CONSOLE)
     held = benchHolding(); // a bench image keeps the frame awake
 #endif
-    if (nextWakeupSec > DEFAULT_REFRESH_SEC && !held) {
+    if (nextWakeupSec > DEFAULT_REFRESH_SEC && !held && !sceneKeepsAwake()) {
       enterDeepSleep(nextWakeupSec);
     }
   }
@@ -2440,6 +2544,11 @@ void loop() {
 #if defined(WIGNET_BENCH_CONSOLE)
     held = benchHolding();
 #endif
+#if defined(WIGNET_PACED_PLAYER)
+    // Rule 1 of paced scenes: no redraw, /pic included, while the screen is
+    // locked after the last one. The poll waits for it.
+    held = held || PacedPlayer::screenLocked();
+#endif
     if (wignetEnabled && !held &&
         (millis() - lastWignetPoll >= pollIntervalMs)) {
       Serial.println("Periodic Wignet fetch...");
@@ -2463,7 +2572,7 @@ void loop() {
 
       if (fetchSuccess) {
         // Enter deep sleep if allowed and delay is significant
-        if (deepSleepAllowed && nextWakeupSec > DEFAULT_REFRESH_SEC) {
+        if (deepSleepAllowed && nextWakeupSec > DEFAULT_REFRESH_SEC && !sceneKeepsAwake()) {
           enterDeepSleep(nextWakeupSec);
         } else if (!deepSleepAllowed) {
           Serial.printf(
@@ -2491,6 +2600,9 @@ void loop() {
 
 #if defined(WIGNET_SCENE_PLAYER)
   if (WiFi.status() == WL_CONNECTED) ScenePlayer::service();
+#endif
+#if defined(WIGNET_PACED_PLAYER)
+  PacedPlayer::service(); // draws offline too: the pages are in flash
 #endif
   delay(10);
 }

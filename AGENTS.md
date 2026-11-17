@@ -28,8 +28,10 @@ image fetching or wake scheduling. It is the client/server contract.
   (`wifi_provisioning.cpp`, `docs/wifi.md`). It reports them as `wifi=` and
   forgets what `wifiForget` lists, never the network in use. Keep that path on
   a new board.
-- Scenes (`scene1`, `scene_player.cpp`) only on a screen that redraws in
-  under a second (LCD, OLED, HDMI), never on e-paper. Each scene feature has
+- Live scenes (`scene2`, `scene_player.cpp`) only on a screen that redraws
+  in under a second (LCD, OLED, HDMI). E-paper plays paced scenes
+  (`scene_paced1`, `paced_player.cpp`): still pages, a screen lock after
+  every redraw (`HARDWARE.md`). Each scene feature has
   its own token, declared only when the board has the hardware
   (`scene_sound1`, `scene_tone1`, `motion1`, `pwr_short1`): `HARDWARE.md`
   "Firmware rules", `docs/scenes.md`.
