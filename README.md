@@ -34,6 +34,10 @@ To build from source:
 
 For a TV, flash the Raspberry Pi image instead: [raspberry-tv/README.md](raspberry-tv/README.md).
 
+Changed the firmware? Install your own build over the air on the Wignets you
+administer: commit, build, then `python3 esp32/wignet_push.py -e <environment>`.
+See [docs/own_firmware.md](docs/own_firmware.md).
+
 ## Supported hardware
 
 | Board | Screen | Environment |
@@ -62,7 +66,8 @@ under any licence, open or proprietary.
 
 - `esp32/`: PlatformIO firmware for every ESP32 and ESP8266 board, the Wi-Fi
   setup portal (`esp32/portal/`) and bench tools (`show_image.py`,
-  `play_mml.py`, `testcard.py`).
+  `play_mml.py`, `testcard.py`), and `wignet_push.py`, which uploads your own
+  build to install it over the air.
 - `raspberry-tv/`: the HDMI TV client and its Buildroot image.
 - `raspberry/`: the Raspberry Pi e-paper client.
 - `docs/`: screens and features the firmware implements (colour e-paper,
