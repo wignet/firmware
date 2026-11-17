@@ -126,7 +126,10 @@ ignored without making `/schedule` fail.
   (`[{seq, name}]`, acknowledged with `&sev=<last seq>`) and `utcOffsetSec`.
   The bundle is `GET /scene/<id>.json` and `GET /scene/<id>/<asset>.bin`
   (`&z=1` asks for a zlib stream); `report` values go to `POST /input`, all
-  with `?mac=`. See [docs/scenes.md](docs/scenes.md).
+  with `?mac=`. See [docs/scenes.md](docs/scenes.md). With a speaker,
+  `scene_volume1`: the manifest may bind the sounds' volume (`"sound":
+  {"bind": {"volume": …}}`), mark a sound `"loop": true`, and use the
+  `silence` action.
 - **Paced scenes (`scene_paced1`, e-paper).** The same `in=`, `sev=`,
   `scene` and `sceneEvents`, and the same `/input`. The manifest has
   `"paced": 1`, a `format` (`bmp1` or `wgn6`) and `pages` (`{page, file,
