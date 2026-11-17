@@ -135,7 +135,12 @@ ignored without making `/schedule` fail.
   `"paced": 1`, a `format` (`bmp1` or `wgn6`) and `pages` (`{page, file,
   bytes, sha256}`), each `GET /scene/<id>/page<n>.bin?mac=`, the bytes
   `/pic` would serve; page 1 is `/pic`. An optional `rd=<ms>` declares the
-  board's own full-redraw time; without it the server uses its table. When
+  board's own full-redraw time; without it the server uses its table. An
+  optional `pf=<bytes>` declares the room for a scene's pages in flash: free
+  LittleFS plus the pages held in `/paced/` (whole 4 KB blocks), less the
+  16 KB the player leaves free. The board keeps every page, page 1 too, and
+  the server refuses a scene whose pages exceed it; without it the server
+  uses its table (`paced_player.cpp` `pageFlash`, firmware after 6d074ae). When
   a pushed scene ends itself (`end`, a hold), the board posts `"ended":
   true` on `/input` (`events` may be empty): the server ends the push and
   answers `"push_ended": true`, and `/pic` serves the slides again. See

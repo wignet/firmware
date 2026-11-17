@@ -45,6 +45,7 @@ constexpr size_t REPORTS_MAX = 32;
 constexpr uint32_t RETRY_MS = 30000;
 // Flash left free besides the pages: LittleFS needs a few blocks to write.
 constexpr size_t FLASH_SPARE = 16 * 1024;
+constexpr size_t FLASH_BLOCK = 4096; // a LittleFS block: a file takes whole ones
 const char *const DIR = "/paced";
 
 SemaphoreHandle_t lock = nullptr;
@@ -620,13 +621,57 @@ void begin(const Hooks &given) {
                 static_cast<unsigned>(LittleFS.totalBytes() - LittleFS.usedBytes()));
 }
 
+// The flash a new scene's pages may take: what is free, plus the pages held
+// now (load() removes them first, removeOthers), less FLASH_SPARE. The same
+// sum load() compares a scene's pages with, every page, the start page too.
+size_t pageFlash() {
+  if (!filesystemReady) return 0;
+  size_t held = 0;
+  File dir = LittleFS.open(DIR);
+  if (dir) {
+    for (File file = dir.openNextFile(); file; file = dir.openNextFile())
+      held += (file.size() + FLASH_BLOCK - 1) / FLASH_BLOCK * FLASH_BLOCK;
+    dir.close();
+  }
+  const size_t room = LittleFS.totalBytes() - LittleFS.usedBytes() + held;
+  return room > FLASH_SPARE ? room - FLASH_SPARE : 0;
+}
+
 String scheduleParams() {
   String out = "&in=a";
 #if defined(WIGNET_BUTTON_KEY) && WIGNET_BUTTON_KEY >= 0
   out += ",b";
 #endif
   if (lastEventSeq > 0) out += "&sev=" + String(lastEventSeq);
+  // pf=: the bytes of pages a scene may have here; the platform refuses a
+  // bigger one rather than send what this board would not play.
+  if (filesystemReady) out += "&pf=" + String(static_cast<unsigned>(pageFlash()));
   return out;
+}
+
+void describeFlash(Print &out) {
+  if (!filesystemReady) {
+    out.println("[bench] flash: no filesystem");
+    return;
+  }
+  out.printf("[bench] flash: %u B, %u B used, %u B free, pf=%u\n", static_cast<unsigned>(LittleFS.totalBytes()),
+             static_cast<unsigned>(LittleFS.usedBytes()),
+             static_cast<unsigned>(LittleFS.totalBytes() - LittleFS.usedBytes()),
+             static_cast<unsigned>(pageFlash()));
+  std::vector<String> dirs{"/"};
+  for (size_t i = 0; i < dirs.size(); i++) {
+    File dir = LittleFS.open(dirs[i]);
+    if (!dir) continue;
+    for (File file = dir.openNextFile(); file; file = dir.openNextFile()) {
+      const String path = (dirs[i] == "/" ? String() : dirs[i]) + "/" + file.name();
+      if (file.isDirectory()) {
+        dirs.push_back(path);
+      } else {
+        out.printf("[bench]   %8u  %s\n", static_cast<unsigned>(file.size()), path.c_str());
+      }
+    }
+    dir.close();
+  }
 }
 
 void onSchedule(const String &payload) {

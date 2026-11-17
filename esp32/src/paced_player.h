@@ -40,8 +40,12 @@ struct Hooks {
 
 void begin(const Hooks &hooks);
 
-// What /schedule adds: "&in=a[,b]&sev=<last scene event seen>".
+// What /schedule adds: "&in=a[,b]&sev=<last scene event seen>&pf=<bytes>",
+// pf= the bytes of pages a scene may have in flash (docs/scenes_paced.md).
 String scheduleParams();
+
+// The bench console's `flash`: LittleFS's size, use, pf= and every file.
+void describeFlash(Print &out);
 
 // The /schedule answer: the scene to play (or none), its events, the clock.
 void onSchedule(const String &payload);
