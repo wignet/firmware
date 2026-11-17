@@ -4,6 +4,7 @@
 
 #include <Arduino.h>
 #include "power_hal.h"
+#include "paced_player.h"
 #if defined(WIGNET_BENCH_AUDIO)
 #include "alarm_clock_hal.h"
 #include "audio_hal.h"
@@ -407,6 +408,9 @@ void help() {
 #endif
   Serial.println("[bench]   resume              let the platform refresh the panel again");
   Serial.println("[bench]   power               power source and battery, as /schedule reports them");
+#if defined(WIGNET_PACED_PLAYER)
+  Serial.println("[bench]   flash               LittleFS: size, use, room for scene pages (pf=), files");
+#endif
 #if defined(WIGNET_BENCH_AUDIO)
   Serial.println("[bench]   i2c [reset]         bus state and scan; reset = 9-clock recovery");
 #endif
@@ -457,6 +461,10 @@ void handle(String text) {
 #endif
   } else if (command == "power") {
     PowerHAL::describe(Serial);
+#if defined(WIGNET_PACED_PLAYER)
+  } else if (command == "flash") {
+    PacedPlayer::describeFlash(Serial);
+#endif
   } else if (command == "help") {
     help();
   } else {
