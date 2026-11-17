@@ -113,6 +113,7 @@ struct Report {
 struct Sound {
   std::string tune;
   uint8_t volume = 50;
+  bool loop = false; // played until silence or another sound (scene_volume1)
 };
 
 // A tone: its pitch (a MIDI note) and on/off are bound (docs/scene_runtime.md).
@@ -175,6 +176,7 @@ bool restartWanted = false; // with stopReason: a slide's hold, played again fro
 // for the audio task to end (playCues). Empty: none.
 std::string pendingSound;
 constexpr uint32_t SOUND_MAX_MS = 10000;
+constexpr uint32_t LOOP_MAX_MS = 3600000; // a looping sound: until silence, at most an hour
 // The tone, as its bindings set it.
 bool toneWanted = false;
 float toneHz = 261.63f;
@@ -224,10 +226,19 @@ void playSound(const std::string &name) {
     return;
   }
   pendingSound.clear();
-  if (!AudioHAL::startCue(found->second.tune.c_str(), found->second.volume, SOUND_MAX_MS))
+  if (!AudioHAL::startCue(found->second.tune.c_str(), found->second.volume,
+                         found->second.loop ? LOOP_MAX_MS : SOUND_MAX_MS, found->second.loop))
     Serial.printf("[Scene] Sound %s not played\n", name.c_str());
 #else
   (void)name;
+#endif
+}
+
+// `silence` (scene_volume1): the scene's sound stops; an alarm never does.
+void silenceSound() {
+#if defined(WIGNET_HAS_AUDIO)
+  pendingSound.clear();
+  if (AudioHAL::isPlaying() && !AudioHAL::isRinging()) AudioHAL::stop();
 #endif
 }
 
@@ -550,6 +561,7 @@ public:
     }
   }
   void sound(const std::string &name) override { playSound(name); }
+  void silence() override { silenceSound(); }
   void report(const std::string &value, const std::string &event, int page) override {
     if (reports.size() < REPORTS_MAX) {
       Report report;
@@ -566,6 +578,12 @@ public:
     stopReason = "the scene ended itself";
   }
   void prop(Target target, Prop prop, float value) override {
+    if (target.kind == 's') {
+#if defined(WIGNET_HAS_AUDIO)
+      if (prop == SceneRuntime::VOLUME) AudioHAL::setSceneVolume(value);
+#endif
+      return;
+    }
     if (target.kind == 't') {
       if (prop == SceneRuntime::PITCH) toneHz = 440.0f * powf(2.0f, (value - 69.0f) / 12.0f);
       if (prop == SceneRuntime::ON) {
@@ -1092,6 +1110,7 @@ std::unique_ptr<Scene> load(const String &id, const String &url) {
     Sound sound;
     sound.tune = item.value()["tune"] | "";
     sound.volume = item.value()["volume"] | 50;
+    sound.loop = item.value()["loop"] | false;
     next->sounds[item.key().c_str()] = sound;
   }
   // Each move's target, in the order of the entries and their actions: the
@@ -1167,6 +1186,9 @@ void takeDown() {
 
 void putUp(std::unique_ptr<Scene> next) {
   takeDown();
+#if defined(WIGNET_HAS_AUDIO)
+  AudioHAL::setSceneVolume(100); // until the scene binds its own
+#endif
   scene = std::move(next);
   // Turned while it downloaded: the layout for how the board is held now.
   if (const Layout *layout = scene->layouts.empty() ? nullptr : layoutFor(*scene, heldTurn))

@@ -75,7 +75,10 @@ including what was and was not validated on hardware.
   reads its battery (`PowerHAL`: an AXP2101 or a battery ADC pin) declares
   `scene_battery1`, and the player gives its scenes `battery.percent`,
   `.charging`, `.plugged` and `.known`, read every 10 s
-  (`Runtime::setBattery`).
+  (`Runtime::setBattery`). A player with a speaker declares `scene_volume1`:
+  it follows the scene's bound `volume` live (`AudioHAL::setSceneVolume`,
+  per 10 ms buffer, never an alarm), loops a sound marked `loop`
+  (`startCue(..., loop)`) and plays `silence`; the paced player too.
 
   **A new kind of scene is not a new token.** It is expressed with the
   runtime (variables, bindings, guards, `every:`, `when:`) or becomes a

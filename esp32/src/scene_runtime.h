@@ -18,12 +18,14 @@
 namespace SceneRuntime {
 
 // What a binding sets.
-enum Prop : uint8_t { DX, DY, FRAME, ROTATION, VISIBLE, OPACITY, W, H, COLOR, PITCH, ON, PROP_COUNT };
+// VOLUME: the sounds' volume, 0-100 (target 's', scene_volume1).
+enum Prop : uint8_t { DX, DY, FRAME, ROTATION, VISIBLE, OPACITY, W, H, COLOR, PITCH, ON, VOLUME, PROP_COUNT };
 const char *propName(Prop prop);
 
-// A binding's target: an object (o<id>), a page (p<n>), or the tone.
+// A binding's target: an object (o<id>), a page (p<n>), the tone, or the
+// sounds (their volume).
 struct Target {
-  char kind; // 'o', 'p' or 't'
+  char kind; // 'o', 'p', 't' or 's'
   int id;
 };
 
@@ -37,6 +39,7 @@ public:
   virtual void wander(int id, bool on) = 0;
   virtual void show(int id, bool shown) = 0;
   virtual void sound(const std::string &name) = 0;
+  virtual void silence() = 0; // the sound playing stops (scene_volume1)
   virtual void report(const std::string &value, const std::string &event, int page) = 0;
   virtual void end() = 0;
   virtual void prop(Target target, Prop prop, float value) = 0;
