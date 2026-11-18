@@ -22,6 +22,10 @@ struct Entry {
   uint8_t volume = 70;
   uint32_t fadeInSec = 600;
   uint32_t maxDurationSec = 600;
+  // The scene this sound stands in for (scene_event1): when the board plays
+  // it, the sound does not ring. Empty: the sound rings, as always.
+  std::string sceneId;
+  int64_t sceneUntil = 0; // when the event's window closes (event:end), UTC
 };
 
 // A sound found later than this after its time is skipped, not rung late

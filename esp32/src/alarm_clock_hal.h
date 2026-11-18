@@ -11,6 +11,13 @@ void updateFromSchedule(const String &json);
 void ringIfDue();
 void prepareSleep(int &seconds);
 
+// A sound whose event shows a scene (scene_event1, `scene` on a `sounds`
+// entry) is that scene's fallback: at its time the player is asked to play
+// the scene from flash, and the sound rings only if it says no. `at` is the
+// sound's time (event:start), `until` when the event's window closes.
+using ScenePlayerFn = bool (*)(const char *sceneId, const char *eventId, int64_t at, int64_t until);
+void setScenePlayer(ScenePlayerFn play);
+
 // USB bench (usb_console.cpp): a one-off alarm kept apart from the
 // platform's snapshot, so a /schedule poll neither replaces it nor loses the
 // real alarm. It rings through the same path. It lives in RTC memory: it
