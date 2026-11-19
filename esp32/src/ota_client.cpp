@@ -51,6 +51,10 @@ constexpr size_t kChunk = 4096;
 constexpr uint32_t kStallMs = 15000;
 constexpr size_t kMaxKeys = 4;
 constexpr size_t kMaxDer = 128;
+// On battery, a board that measures its charge installs at or above this level.
+// The server applies the same floor before offering (BATTERY_FLOOR_PERCENT in
+// backoffice/ota_schedule.py): keep them equal.
+constexpr int kBatteryFloorPercent = 25;
 
 enum Phase : uint8_t {
   kIdle = 0,
@@ -287,12 +291,13 @@ bool verifySignature(const char *keyId, const String &canonical, const char *sig
   return ecdsaVerify(key->der, key->derLen, digest, sig, sigLen);
 }
 
-// May this board install now? Plugged in, as it measures it. Without a
-// measurement, the signed declaration (or the owner's override) decides.
+// May this board install now? Plugged in, or on battery at or above
+// kBatteryFloorPercent, as it measures it; an unknown charge is not enough.
+// Without a measurement, the signed declaration (or the owner's override) decides.
 bool powerAllows(const char *powerSource, bool powerOverride) {
   if (PowerHAL::available()) {
     PowerHAL::Report report = PowerHAL::read();
-    if (report.valid) return report.external;
+    if (report.valid) return report.external || report.batteryPercent >= kBatteryFloorPercent;
   }
   return strcmp(powerSource, "powered") == 0 || powerOverride;
 }

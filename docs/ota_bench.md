@@ -94,8 +94,11 @@ installs:
 | `reset_before_select` | the running image | reset after the attempt record, before the slot is selected: the old image boots, the attempt counts as interrupted, nothing is reported |
 | `reset_after_select` | the running image | reset after the slot is selected, before the record says so: the new image boots pending and is confirmed as usual |
 
-The unsafe-power case runs against production: on battery, the board
-reports `ota=failed:<id>:power` (passed on Kouleur, 2026-10-29).
+The unsafe-power case runs against production: on battery below 25 %
+(`kBatteryFloorPercent`), the board reports `ota=failed:<id>:power` (passed on
+Kouleur, 2026-10-29, when the firmware still required USB power at any
+charge). The server only offers at or above the same floor, so reaching this
+case takes a charge that drops between the offer and the check.
 
 An image for another chip needs no fault: offer the 7.5 V2 build (an ESP32,
 not an ESP32-S3) with `--fault none`. Its hash and size are right; the board
@@ -168,8 +171,9 @@ What differs from the PhotoPainter:
 - **Wrong chip**: offer the 7.5 V2 build (an ESP32 image):
   `ota=failed:<id>:chip`.
 - **Power**: it measures its own (the AXP2101's VBUS, `PowerHAL::available()`),
-  so it installs only on USB or a charger. The bench board has no battery
-  fitted, so the unplugged case did not run.
+  so it installs on USB or a charger, or on battery at 25 % or more when the
+  gauge gives a charge (an unknown charge is refused). The bench board has no
+  battery fitted, so the unplugged case did not run.
 - **Download**: 1.56 MB in about 40 s over Wi-Fi. What the screen does
   meanwhile (the LVGL task keeps running on the other core) was not watched.
 
