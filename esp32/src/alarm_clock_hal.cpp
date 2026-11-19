@@ -108,6 +108,8 @@ struct LastRing {
 };
 RTC_DATA_ATTR LastRing lastRing;
 
+AlarmClockHAL::ScenePlayerFn scenePlayer = nullptr;
+
 void recordRing(const char *occurrenceId, int64_t due, int64_t rang) {
   lastRing.magic = TEST_ALARM_MAGIC;
   strncpy(lastRing.occurrenceId, occurrenceId, sizeof(lastRing.occurrenceId) - 1);
@@ -400,6 +402,10 @@ String serializeHeld() {
     item["fadeInSec"] = entry.fadeInSec;
     item["maxDurationSec"] = entry.maxDurationSec;
     if (!entry.tuneId.empty()) item["tuneId"] = entry.tuneId;
+    if (!entry.sceneId.empty()) {
+      item["scene"]["id"] = entry.sceneId;
+      item["scene"]["until"] = entry.sceneUntil;
+    }
   }
   JsonObject tunes = doc["tunes"].to<JsonObject>();
   for (const auto &tune : heldTunes) tunes[tune.first] = tune.second;
@@ -423,6 +429,10 @@ void readList(JsonVariantConst root, std::vector<SoundList::Entry> &entries,
     entry.volume = static_cast<uint8_t>(constrain(item["volume"] | 70, 0, 100));
     entry.fadeInSec = constrain(item["fadeInSec"] | DEFAULT_FADE_IN_SEC, 0U, 3600U);
     entry.maxDurationSec = constrain(item["maxDurationSec"] | 600U, 30U, 3600U);
+    entry.sceneId = item["scene"]["id"] | "";
+    // Without `until` (an older platform), the window the sound would ring for.
+    entry.sceneUntil = item["scene"]["until"] |
+                       static_cast<int64_t>(entry.epoch + entry.fadeInSec + entry.maxDurationSec);
     if (entry.epoch < MIN_VALID_EPOCH || entry.occurrenceId.empty() ||
         !validSound(entry.sound.c_str())) {
       Serial.printf("[Alarm] Sound %s ignored: invalid\n", entry.occurrenceId.c_str());
@@ -672,6 +682,21 @@ void ringIfDue() {
     const int due = SoundList::dueIndex(held, doneOccurrences, now);
     if (due < 0) return;
     const SoundList::Entry entry = held[due];
+    if (!entry.sceneId.empty()) {
+#if defined(WIGNET_SCENES_PACED)
+      // The player starts after the first ringIfDue of setup(): the sound
+      // waits for it, within its grace, rather than ring over its scene.
+      if (!scenePlayer) return;
+#endif
+      if (scenePlayer && scenePlayer(entry.sceneId.c_str(), entry.eventId.c_str(), entry.epoch, entry.sceneUntil)) {
+        markDone(entry.occurrenceId);
+        recordRing(entry.occurrenceId.c_str(), entry.epoch, now);
+        Serial.printf("[Alarm] %s: its scene plays instead (%lld s after its time)\n", entry.occurrenceId.c_str(),
+                      static_cast<long long>(now - entry.epoch));
+        return;
+      }
+      Serial.printf("[Alarm] %s: its scene cannot play; the sound rings\n", entry.occurrenceId.c_str());
+    }
     // Persisted before playback, like markOccurrenceDone below.
     markDone(entry.occurrenceId);
     recordRing(entry.occurrenceId.c_str(), entry.epoch, now);
@@ -696,6 +721,8 @@ void ringIfDue() {
   AudioHAL::startAlarm(path.c_str(), current.tune.c_str(), current.volume,
                        current.maxDurationSec, current.fadeInSec);
 }
+
+void setScenePlayer(ScenePlayerFn play) { scenePlayer = play; }
 
 void prepareSleep(int &seconds) {
   const int64_t now = time(nullptr);
@@ -816,6 +843,7 @@ bool setTestAlarm(int64_t, const char *, uint8_t, uint32_t, uint32_t) { return f
 void clearTestAlarm() {}
 void setTimerBackupSlack(int) {}
 void printStatus(const char *) {}
+void setScenePlayer(ScenePlayerFn) {}
 } // namespace AlarmClockHAL
 
 #endif

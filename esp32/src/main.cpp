@@ -680,6 +680,9 @@ int fetchSchedule() {
   // scene_volume1: a scene's bound volume, looping sounds and silence
   // (audio_hal.cpp setSceneVolume, startCue loop).
   url += "%2Cscene_volume1";
+  // scene_event1: an event's scene, kept in flash and played at its time
+  // instead of its sound (PacedPlayer::playEvent), event:start and event:end.
+  url += "%2Cscene_event1";
   url += PacedPlayer::scheduleParams();
   if (panelRedrawMs) url += "&rd=" + String(panelRedrawMs); // measured, above
 #endif
@@ -783,6 +786,8 @@ int fetchSchedule() {
     // scene_paced1: plays paced scenes, still 1-bit pages drawn by the
     // server, with the runtime's logic (paced_player.cpp).
     caps += "%2Cscene_paced1";
+    // scene_event1: an event's scene in its window, event:start and event:end.
+    caps += "%2Cscene_event1";
 #endif
     if (caps.length()) url += "&caps=v1%3A" + caps.substring(3);
   }
@@ -2225,6 +2230,14 @@ static bool pacedAwake() {
   return true; // the driver board has no battery: it runs on USB power
 #endif
 }
+
+// An event's scene ended over a page /pic's ETag does not stand for: the
+// next poll, due now, fetches /pic whole (PacedPlayer::Hooks).
+static void pacedRefetch() {
+  etagValidThisBoot = false;
+  savePersistedEtag("");
+  lastWignetPoll = millis() - 3600UL * 1000UL;
+}
 #endif
 
 // A paced scene plays: no deep sleep, so its buttons work.
@@ -2330,7 +2343,12 @@ void setup() {
     PacedPlayer::Hooks hooks;
     hooks.draw = pacedDraw;
     hooks.awake = pacedAwake;
+    hooks.refetch = pacedRefetch;
     PacedPlayer::begin(hooks); // after the alarm's LittleFS mount
+#if defined(WIGNET_HAS_AUDIO)
+    // A sound whose event shows a scene rings only if the scene can't play.
+    AlarmClockHAL::setScenePlayer(PacedPlayer::playEvent);
+#endif
     DisplayHAL::getDisplay()->epd2.setBusyCallback(onPanelBusy);
   }
 #endif

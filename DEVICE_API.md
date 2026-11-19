@@ -145,6 +145,20 @@ ignored without making `/schedule` fail.
   true` on `/input` (`events` may be empty): the server ends the push and
   answers `"push_ended": true`, and `/pic` serves the slides again. See
   the platform's `docs/scenes_paced.md` for the rules the board keeps.
+- **Events' scenes (`scene_event1`, paced player).** In an event's display
+  window `scene` carries `"event": {"id", "at", "until"}` (epochs): the board
+  fires `event:start` at `at` and `event:end` at `until`, then stops the
+  scene; it plays on battery too, from the window's opening. Every `sounds`
+  entry (and `alarm`) whose event shows a scene the board plays carries
+  `"scene": {"id", "url", "etag", "until"}`. The board keeps that bundle in
+  flash ahead of its time (`/pacedev/<id>.json` and its pages in `/paced/`,
+  which `pf=` then leaves out) and, at the entry's time, plays it from flash
+  instead of ringing; the sound rings only when the bundle is missing or
+  does not load. Without `until` (an older server) the window is the
+  sound's: `epoch + fadeInSec + maxDurationSec`. An event's scene that ends
+  posts nothing (it is not a push); the board fetches `/pic` again whole.
+  `paced_player.cpp` `playEvent`, `keepEvents`; `alarm_clock_hal.cpp`
+  `setScenePlayer`.
 
 ## RGB / HDMI readers
 

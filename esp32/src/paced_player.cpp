@@ -47,6 +47,9 @@ constexpr uint32_t RETRY_MS = 30000;
 constexpr size_t FLASH_SPARE = 16 * 1024;
 constexpr size_t FLASH_BLOCK = 4096; // a LittleFS block: a file takes whole ones
 const char *const DIR = "/paced";
+// Events' scenes kept ahead of their time (scene_event1): <id>.json, the
+// manifest, and <id>.tag, its etag. Their pages live in DIR with the others.
+const char *const EVENT_DIR = "/pacedev";
 
 SemaphoreHandle_t lock = nullptr;
 struct Locked {
@@ -74,6 +77,17 @@ struct Scene {
   std::map<int, String> pages; // number: its file in flash
   std::map<std::string, Sound> sounds;
   SceneRuntime::Runtime runtime;
+  // An event's scene (scene_event1): event:start at `at`, event:end at
+  // `until` (epochs), then it stops. It plays on battery too: the event woke
+  // the board for it.
+  bool event = false;
+  uint32_t at = 0, until = 0;
+  bool startFired = false, endFired = false;
+  // Started from flash at its sound's time: a /schedule since then says
+  // whether it is still named. Before one, nothing takes it down.
+  bool named = true;
+  // /pic, what the loop drew, is its start page (false: started over the slides).
+  bool picIsStart = true;
 };
 
 std::unique_ptr<Scene> scene; // the one playing
@@ -136,6 +150,14 @@ void thaw() {
   stoodStillMs += millis() - frozenAtMs;
   frozen = false;
   syncClock();
+}
+
+// UTC now, for an event's times: the system clock once set (NTP or the RTC,
+// across deep sleep), else the one /schedule gave. 0: not known.
+uint32_t epochNow() {
+  const time_t now = time(nullptr);
+  if (now > 1700000000) return static_cast<uint32_t>(now);
+  return clockEpoch ? clockEpoch + (millis() - clockMillis) / 1000 : 0;
 }
 
 // ------------------------------------------------------------ the runtime --
@@ -298,6 +320,20 @@ void sceneTask(void *) {
 #if defined(WIGNET_HAS_AUDIO)
     if (!pendingSound.empty() && !AudioHAL::isPlaying()) playSound(pendingSound);
 #endif
+    if (scene->event) {
+      const uint32_t now = epochNow();
+      if (now && !scene->startFired && now >= scene->at) {
+        scene->startFired = true;
+        dispatch("event:start", false);
+      }
+      if (now && !scene->endFired && now >= scene->until) {
+        scene->endFired = true;
+        dispatch("event:end", false);
+        // The window is closed: the scene stops, its last sound may finish.
+        if (scene && stopReason.isEmpty()) stopReason = "its event's window closing";
+      }
+      if (!scene || stopReason.length()) continue;
+    }
     scene->runtime.tick(sceneNow());
   }
 }
@@ -307,6 +343,25 @@ void sceneTask(void *) {
 // What /schedule last said, applied by service() from the loop.
 String wantedId, wantedUrl;
 bool wantedSlide = false;
+// The scene named is an event's (`event` on /schedule's scene): its times.
+bool wantedEvent = false;
+uint32_t wantedAt = 0, wantedUntil = 0;
+// The last scene /schedule named, kept across deep sleep: when it is the one
+// an alarm starts from flash, /pic already shows its start page.
+RTC_DATA_ATTR char namedRtc[48];
+
+// Events' scenes to keep in flash: what `sounds` (and `alarm`) last named.
+struct EventRef {
+  String id, url, etag;
+};
+std::vector<EventRef> eventsWanted;
+bool eventsListed = false; // a /schedule with `sounds` came: the store follows it
+bool eventsDirty = false;  // to fetch or to remove
+uint32_t eventsRetryAtMs = 0;
+// The page files the kept events' scenes need: never removed with a scene's.
+std::vector<String> eventPages;
+// Asks the loop to fetch /pic again, whole (Hooks::refetch).
+bool refetchWanted = false;
 String endedId;   // ended here (`end`, a hold): not played again while named
 String refusedId; // a bundle this board cannot play: not asked for again while named
 // Both kept across deep sleep, in RTC memory: a board that sleeps once its
@@ -398,29 +453,87 @@ bool download(const String &url, const String &path, size_t bytes, const String 
   return LittleFS.rename(part, path);
 }
 
-// Every file in DIR that `keep` does not name.
+String pagePath(const String &sha) { return String(DIR) + "/" + sha.substring(0, 20) + ".bin"; }
+
+bool listed(const std::vector<String> &paths, const String &path) {
+  for (const String &p : paths)
+    if (p == path) return true;
+  return false;
+}
+
+// Every file in DIR that `keep` does not name, nor a kept event's scene.
 void removeOthers(const std::vector<String> &keep) {
   std::vector<String> gone;
   File dir = LittleFS.open(DIR);
   if (!dir) return;
   for (File file = dir.openNextFile(); file; file = dir.openNextFile()) {
     const String path = String(DIR) + "/" + file.name();
-    bool kept = false;
-    for (const String &k : keep) kept |= k == path;
-    if (!kept) gone.push_back(path);
+    if (!listed(keep, path) && !listed(eventPages, path)) gone.push_back(path);
   }
   dir.close();
   for (const String &path : gone) LittleFS.remove(path);
 }
 
+String eventFile(const String &id, const char *ext) { return String(EVENT_DIR) + "/" + id + ext; }
+
+bool readFile(const String &path, String &text) {
+  File file = LittleFS.open(path);
+  if (!file) return false;
+  text = file.readString();
+  file.close();
+  return text.length() > 0;
+}
+
+bool writeFile(const String &path, const String &text) {
+  File file = LittleFS.open(path, "w");
+  if (!file) return false;
+  const bool ok = file.print(text) == text.length();
+  file.close();
+  if (!ok) LittleFS.remove(path);
+  return ok;
+}
+
+// The ids of the events' scenes kept in flash.
+std::vector<String> keptEvents() {
+  std::vector<String> ids;
+  File dir = LittleFS.open(EVENT_DIR);
+  if (!dir) return ids;
+  for (File file = dir.openNextFile(); file; file = dir.openNextFile()) {
+    String name = file.name();
+    if (name.endsWith(".json")) ids.push_back(name.substring(0, name.length() - 5));
+  }
+  dir.close();
+  return ids;
+}
+
+// eventPages again, from the kept manifests.
+void indexEventPages() {
+  eventPages.clear();
+  JsonDocument filter;
+  filter["pages"][0]["sha256"] = true;
+  for (const String &id : keptEvents()) {
+    String text;
+    JsonDocument doc;
+    if (!readFile(eventFile(id, ".json"), text) || deserializeJson(doc, text, DeserializationOption::Filter(filter)))
+      continue;
+    for (JsonObjectConst page : doc["pages"].as<JsonArrayConst>()) {
+      const String sha = page["sha256"] | "";
+      if (sha.length() == 64 && !listed(eventPages, pagePath(sha))) eventPages.push_back(pagePath(sha));
+    }
+  }
+}
+
 enum class Loaded { Ok, Retry, Refused };
 
-// The manifest and every page, checked, into a Scene not yet playing.
-// Network and flash only: it runs from the loop without the lock.
-Loaded load(const String &id, const String &url, std::unique_ptr<Scene> &out) {
-  const String mac = WiFi.macAddress();
-  String text;
-  if (!getText(baseUrl() + url + "?mac=" + mac, text)) return Loaded::Retry;
+struct PageFile {
+  String file, path, sha;
+  size_t bytes;
+};
+
+// A manifest into a Scene not yet playing, and its pages: in `missing` those
+// not in flash, with `needed` their bytes, in `keep` all of them.
+Loaded build(const String &id, const String &text, std::unique_ptr<Scene> &out, std::vector<PageFile> &missing,
+             std::vector<String> &keep, size_t &needed) {
   JsonDocument doc;
   if (deserializeJson(doc, text)) {
     Serial.println("[Paced] Manifest: invalid JSON");
@@ -454,15 +567,9 @@ Loaded load(const String &id, const String &url, std::unique_ptr<Scene> &out) {
   }
   // Each page by its sha256: a page already in flash (the same scene again,
   // after a reboot, or another scene's identical page) is not downloaded.
-  struct Wanted {
-    String file, path, sha;
-    size_t bytes;
-  };
-  std::vector<Wanted> missing;
-  std::vector<String> keep;
-  size_t needed = 0;
+  needed = 0;
   for (JsonObjectConst page : doc["pages"].as<JsonArrayConst>()) {
-    Wanted w;
+    PageFile w;
     w.file = page["file"] | "";
     w.sha = page["sha256"] | "";
     w.bytes = page["bytes"] | 0;
@@ -470,7 +577,7 @@ Loaded load(const String &id, const String &url, std::unique_ptr<Scene> &out) {
       Serial.println("[Paced] Manifest: a page without its file, size or sha256");
       return Loaded::Refused;
     }
-    w.path = String(DIR) + "/" + w.sha.substring(0, 20) + ".bin";
+    w.path = pagePath(w.sha);
     next->pages[page["page"] | 0] = w.path;
     keep.push_back(w.path);
     File have = LittleFS.open(w.path);
@@ -485,17 +592,41 @@ Loaded load(const String &id, const String &url, std::unique_ptr<Scene> &out) {
     Serial.println("[Paced] Manifest: no start page");
     return Loaded::Refused;
   }
-  // The pages of the scene before go, unless this one has them too.
-  removeOthers(keep);
+  out = std::move(next);
+  return Loaded::Ok;
+}
+
+// The pages missing, downloaded into flash if they fit.
+Loaded fetchPages(const String &id, const std::vector<PageFile> &missing, size_t needed) {
+  const String mac = WiFi.macAddress();
   const size_t free = LittleFS.totalBytes() - LittleFS.usedBytes();
   if (needed + FLASH_SPARE > free) {
     Serial.printf("[Paced] %u B of pages, %u B of flash free: not played\n", static_cast<unsigned>(needed),
                   static_cast<unsigned>(free));
     return Loaded::Refused;
   }
-  for (const Wanted &w : missing)
+  for (const PageFile &w : missing)
     if (!download(baseUrl() + "/scene/" + id + "/" + w.file + "?mac=" + mac, w.path, w.bytes, w.sha))
       return Loaded::Retry;
+  return Loaded::Ok;
+}
+
+// The manifest and every page, checked, into a Scene not yet playing.
+// Network and flash only: it runs from the loop without the lock.
+Loaded load(const String &id, const String &url, std::unique_ptr<Scene> &out) {
+  const String mac = WiFi.macAddress();
+  String text;
+  if (!getText(baseUrl() + url + "?mac=" + mac, text)) return Loaded::Retry;
+  std::unique_ptr<Scene> next;
+  std::vector<PageFile> missing;
+  std::vector<String> keep;
+  size_t needed = 0;
+  const Loaded built = build(id, text, next, missing, keep, needed);
+  if (built != Loaded::Ok) return built;
+  // The pages of the scene before go, unless this one has them too.
+  removeOthers(keep);
+  const Loaded fetched = fetchPages(id, missing, needed);
+  if (fetched != Loaded::Ok) return fetched;
   Serial.printf("[Paced] Loaded %s: %u pages (%u downloaded, %u B), %u B of flash free\n", id.c_str(),
                 static_cast<unsigned>(next->pages.size()), static_cast<unsigned>(missing.size()),
                 static_cast<unsigned>(needed),
@@ -515,6 +646,13 @@ void takeDown(bool keepSound = false) {
   const String shown = shownFile();
   const String start = pathOf(scene->start);
   restorePath = shown.length() && shown != start ? start : "";
+  if (scene->event) {
+    // An event's scene leaves what /pic serves now: the slides once its window
+    // has closed. The loop fetches it whole unless /pic is already on screen.
+    restorePath = "";
+    if (shownPath.length() && !(shownPath == start && scene->picIsStart)) refetchWanted = true;
+    shownPath = "";
+  }
 #if defined(WIGNET_HAS_AUDIO)
   pendingSound.clear();
   if (!keepSound || soundLoops) {
@@ -540,6 +678,8 @@ void putUp(std::unique_ptr<Scene> next) {
   scene->runtime.setSlide(scene->slide);
   // The loop drew /pic, the start page: the scene starts on it. Anything
   // else on screen (a page of the scene before) is replaced once the lock allows.
+  // An event's scene started from flash over the slides draws its start page.
+  if (!scene->picIsStart && shownPath.isEmpty()) shownPath = "/pic";
   wantedPage = scene->start;
   requested = 0;
   frozen = false;
@@ -547,7 +687,62 @@ void putUp(std::unique_ptr<Scene> next) {
   requested = 0;
   if (pathOf(scene->start) != shownFile()) freeze();
   syncClock();
-  Serial.printf("[Paced] Playing %s from page %d\n", scene->id.c_str(), scene->start);
+  Serial.printf("[Paced] Playing %s from page %d%s\n", scene->id.c_str(), scene->start,
+                scene->event ? (String(", its event's scene until ") + scene->until).c_str() : "");
+}
+
+// The next event's scene missing from flash, or a kept one no longer named:
+// one step per call, from the loop without the lock.
+void keepEvents() {
+  if (!eventsListed) return;
+  for (const String &id : keptEvents()) {
+    bool named = false;
+    for (const EventRef &ref : eventsWanted) named |= ref.id == id;
+    if (named) continue;
+    LittleFS.remove(eventFile(id, ".json"));
+    LittleFS.remove(eventFile(id, ".tag"));
+    Serial.printf("[Paced] Event scene %s no longer named: dropped\n", id.c_str());
+    indexEventPages();
+    // Its pages go with the next scene loaded (removeOthers), unless shared.
+    return;
+  }
+  for (const EventRef &ref : eventsWanted) {
+    String tag;
+    if (readFile(eventFile(ref.id, ".tag"), tag) && tag == ref.etag) continue;
+    String text;
+    if (!getText(baseUrl() + ref.url + "?mac=" + WiFi.macAddress(), text)) {
+      eventsRetryAtMs = millis() + RETRY_MS;
+      return;
+    }
+    std::unique_ptr<Scene> built;
+    std::vector<PageFile> missing;
+    std::vector<String> keep;
+    size_t needed = 0;
+    Loaded loaded = build(ref.id, text, built, missing, keep, needed);
+    if (loaded == Loaded::Ok) loaded = fetchPages(ref.id, missing, needed);
+    if (loaded == Loaded::Ok && (!writeFile(eventFile(ref.id, ".json"), text) ||
+                                 !writeFile(eventFile(ref.id, ".tag"), ref.etag)))
+      loaded = Loaded::Refused;
+    if (loaded == Loaded::Retry) {
+      eventsRetryAtMs = millis() + RETRY_MS;
+      return;
+    }
+    if (loaded == Loaded::Refused) {
+      // Not kept: its sound rings at its time. Asked for again at the next list.
+      Serial.printf("[Paced] Event scene %s not kept: its sound will ring\n", ref.id.c_str());
+      LittleFS.remove(eventFile(ref.id, ".json"));
+      LittleFS.remove(eventFile(ref.id, ".tag"));
+      indexEventPages();
+      eventsDirty = false;
+      return;
+    }
+    indexEventPages();
+    Serial.printf("[Paced] Event scene %s kept: %u pages (%u downloaded), %u B of flash free\n", ref.id.c_str(),
+                  static_cast<unsigned>(built->pages.size()), static_cast<unsigned>(missing.size()),
+                  static_cast<unsigned>(LittleFS.totalBytes() - LittleFS.usedBytes()));
+    return;
+  }
+  eventsDirty = false;
 }
 
 bool lockOver() { return !drawing && (!lockSet || static_cast<int32_t>(millis() - lockUntilMs) >= 0); }
@@ -590,6 +785,11 @@ void draw(const String &path, int page) {
 
 bool filesystemReady = false;
 
+// The scene named is an event's, its window open: it plays even on battery,
+// from the window's opening (its lead) so that event:start fires on time.
+// Battery use while it waits or snoozes is not counted yet (phase 3).
+bool eventDue() { return wantedEvent && epochNow() < wantedUntil; }
+
 } // namespace
 
 namespace PacedPlayer {
@@ -598,11 +798,11 @@ void begin(const Hooks &given) {
   hooks = given;
   lock = xSemaphoreCreateRecursiveMutex();
   if (esp_reset_reason() == ESP_RST_DEEPSLEEP) {
-    endedRtc[47] = refusedRtc[47] = 0;
+    endedRtc[47] = refusedRtc[47] = namedRtc[47] = 0;
     endedId = endedRtc;
     refusedId = refusedRtc;
   } else {
-    endedRtc[0] = refusedRtc[0] = 0;
+    endedRtc[0] = refusedRtc[0] = namedRtc[0] = 0;
   }
 #if defined(WIGNET_HAS_AUDIO)
   // The alarm's sound lives here too: never format this partition.
@@ -611,10 +811,12 @@ void begin(const Hooks &given) {
   filesystemReady = LittleFS.begin(true);
 #endif
   if (filesystemReady && !LittleFS.exists(DIR)) LittleFS.mkdir(DIR);
+  if (filesystemReady && !LittleFS.exists(EVENT_DIR)) LittleFS.mkdir(EVENT_DIR);
   if (!filesystemReady) {
     Serial.println("[Paced] No filesystem: scenes off");
     return;
   }
+  indexEventPages();
   for (Button &button : buttons) pinMode(button.pin, INPUT_PULLUP);
   xTaskCreatePinnedToCore(sceneTask, "paced", 8192, nullptr, 2, nullptr, 1);
   Serial.printf("[Paced] Player ready (runtime 2), %u B of flash free\n",
@@ -622,7 +824,8 @@ void begin(const Hooks &given) {
 }
 
 // The flash a new scene's pages may take: what is free, plus the pages held
-// now (load() removes them first, removeOthers), less FLASH_SPARE. The same
+// now (load() removes them first, removeOthers) but those of the events'
+// scenes kept, less FLASH_SPARE. The same
 // sum load() compares a scene's pages with, every page, the start page too.
 size_t pageFlash() {
   if (!filesystemReady) return 0;
@@ -630,7 +833,8 @@ size_t pageFlash() {
   File dir = LittleFS.open(DIR);
   if (dir) {
     for (File file = dir.openNextFile(); file; file = dir.openNextFile())
-      held += (file.size() + FLASH_BLOCK - 1) / FLASH_BLOCK * FLASH_BLOCK;
+      if (!listed(eventPages, String(DIR) + "/" + file.name()))
+        held += (file.size() + FLASH_BLOCK - 1) / FLASH_BLOCK * FLASH_BLOCK;
     dir.close();
   }
   const size_t room = LittleFS.totalBytes() - LittleFS.usedBytes() + held;
@@ -681,6 +885,8 @@ void onSchedule(const String &payload) {
   filter["sceneEvents"] = true;
   filter["serverEpoch"] = true;
   filter["utcOffsetSec"] = true;
+  filter["sounds"][0]["scene"] = true;
+  filter["alarm"]["scene"] = true;
   JsonDocument doc;
   if (deserializeJson(doc, payload, DeserializationOption::Filter(filter))) return;
   Locked held;
@@ -694,6 +900,37 @@ void onSchedule(const String &payload) {
   wantedId = doc["scene"]["id"] | "";
   wantedUrl = doc["scene"]["url"] | "";
   wantedSlide = doc["scene"]["slide"] | false;
+  wantedEvent = doc["scene"]["event"].is<JsonObjectConst>();
+  wantedAt = doc["scene"]["event"]["at"] | 0;
+  wantedUntil = doc["scene"]["event"]["until"] | 0;
+  strlcpy(namedRtc, wantedId.c_str(), sizeof(namedRtc));
+  if (scene) scene->named = true;
+  // The events' scenes to keep ahead of their time (scene_event1).
+  if (doc["sounds"].is<JsonArrayConst>()) {
+    std::vector<EventRef> refs;
+    auto add = [&refs](JsonObjectConst item) {
+      EventRef ref;
+      ref.id = item["id"] | "";
+      ref.url = item["url"] | "";
+      ref.etag = item["etag"] | "";
+      if (ref.id.isEmpty() || ref.url.isEmpty() || ref.id.length() > 40) return;
+      for (const EventRef &r : refs)
+        if (r.id == ref.id) return;
+      refs.push_back(ref);
+    };
+    for (JsonObjectConst entry : doc["sounds"].as<JsonArrayConst>())
+      if (entry["scene"].is<JsonObjectConst>()) add(entry["scene"]);
+    if (doc["alarm"]["scene"].is<JsonObjectConst>()) add(doc["alarm"]["scene"]);
+    bool same = eventsListed && refs.size() == eventsWanted.size();
+    for (size_t i = 0; same && i < refs.size(); i++)
+      same = refs[i].id == eventsWanted[i].id && refs[i].etag == eventsWanted[i].etag;
+    if (!same) {
+      eventsWanted = refs;
+      eventsDirty = true;
+      eventsRetryAtMs = 0;
+    }
+    eventsListed = true;
+  }
   for (JsonObjectConst event : doc["sceneEvents"].as<JsonArrayConst>()) {
     const int seq = event["seq"] | 0;
     if (seq <= lastEventSeq) continue;
@@ -712,7 +949,8 @@ void service() {
                     restartWanted ? ": starting the slide again" : "");
       // A slide is not remembered as ended: the next pass loads it again.
       const bool ended = scene && !restartWanted;
-      const bool pushed = ended && !scene->slide;
+      // An event's scene is not a push: nothing to tell, it leaves /pic's picture.
+      const bool pushed = ended && !scene->slide && !scene->event;
       if (ended) remember(endedId, endedRtc, scene->id);
       if (pushed) endedToTell = scene->id;
       restartWanted = false;
@@ -722,11 +960,12 @@ void service() {
         restorePath = "";
       }
     }
-    if (scene && wantedId != scene->id) {
+    if (scene && wantedId != scene->id && scene->named) {
       Serial.println("[Paced] No longer named by /schedule");
       takeDown();
     }
-    if (scene && !awake) {
+    // An event's scene plays on battery too: its event woke the board for it.
+    if (scene && !awake && !scene->event) {
       // On battery: the start page, inert, until the board stays awake again.
       Serial.println("[Paced] Asleep between syncs: the scene waits on its start page");
       takeDown();
@@ -734,13 +973,18 @@ void service() {
     if (wantedId != endedId) remember(endedId, endedRtc, "");
     if (wantedId != refusedId) remember(refusedId, refusedRtc, "");
   }
-  if (filesystemReady && awake && WiFi.status() == WL_CONNECTED && wantedId.length() && !scene &&
-      wantedId != endedId && wantedId != refusedId &&
+  if (filesystemReady && (awake || eventDue()) && WiFi.status() == WL_CONNECTED && wantedId.length() && !scene &&
+      wantedId != endedId && wantedId != refusedId && !(wantedEvent && epochNow() >= wantedUntil) &&
       (!retryAtMs || static_cast<int32_t>(millis() - retryAtMs) >= 0)) {
     std::unique_ptr<Scene> next;
     const Loaded loaded = load(wantedId, wantedUrl, next);
     if (loaded == Loaded::Ok) {
       next->slide = wantedSlide;
+      if (wantedEvent) {
+        next->event = true;
+        next->at = wantedAt;
+        next->until = wantedUntil;
+      }
       retryAtMs = 0;
       Locked held;
       putUp(std::move(next));
@@ -750,6 +994,14 @@ void service() {
       retryAtMs = millis() + RETRY_MS;
       Serial.println("[Paced] Not played; trying again in 30 s");
     }
+  }
+  // Not while a page waits to be drawn: a download holds the loop for seconds.
+  if (filesystemReady && eventsDirty && !frozen && WiFi.status() == WL_CONNECTED &&
+      (!eventsRetryAtMs || static_cast<int32_t>(millis() - eventsRetryAtMs) >= 0))
+    keepEvents();
+  if (refetchWanted) {
+    refetchWanted = false;
+    if (hooks.refetch) hooks.refetch();
   }
   {
     Locked held;
@@ -851,7 +1103,48 @@ bool keepsAwake() {
   Locked held;
   // Still up, or its start page still to put back before sleeping.
   if (scene || restorePath.length() || endedToTell.length() || restoreUnlessEnded.length()) return true;
-  return wantedId.length() && wantedId != endedId && wantedId != refusedId && (!hooks.awake || hooks.awake());
+  return wantedId.length() && wantedId != endedId && wantedId != refusedId &&
+         (!hooks.awake || hooks.awake() || eventDue());
+}
+
+bool playEvent(const char *sceneId, const char *eventId, int64_t at, int64_t until) {
+  if (!lock || !filesystemReady) return false;
+  const String id = sceneId;
+  const uint32_t now = epochNow();
+  if (now && now >= until) return false;
+  {
+    Locked held;
+    if (scene && scene->id == id) {
+      // Already playing, named by /schedule in its window: its time has come.
+      scene->event = true;
+      scene->at = static_cast<uint32_t>(at);
+      scene->until = static_cast<uint32_t>(until);
+      return true;
+    }
+  }
+  String text;
+  if (!readFile(eventFile(id, ".json"), text)) {
+    Serial.printf("[Paced] Event %s: scene %s not in flash\n", eventId, sceneId);
+    return false;
+  }
+  std::unique_ptr<Scene> next;
+  std::vector<PageFile> missing;
+  std::vector<String> keep;
+  size_t needed = 0;
+  if (build(id, text, next, missing, keep, needed) != Loaded::Ok || !missing.empty()) {
+    Serial.printf("[Paced] Event %s: scene %s incomplete in flash\n", eventId, sceneId);
+    return false;
+  }
+  next->event = true;
+  next->at = static_cast<uint32_t>(at);
+  next->until = static_cast<uint32_t>(until);
+  // No /schedule yet since it started: nothing takes it down before one.
+  next->named = false;
+  // /pic shows its start page when the last /schedule named it.
+  next->picIsStart = id == (wantedId.length() ? wantedId : String(namedRtc));
+  Locked held;
+  putUp(std::move(next));
+  return true;
 }
 
 bool playing() { return scene != nullptr; }

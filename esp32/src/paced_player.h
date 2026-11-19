@@ -36,6 +36,9 @@ struct Hooks {
   // True while the board stays awake (mains, a computer on USB, or a board
   // that never sleeps): a scene plays only then.
   bool (*awake)() = nullptr;
+  // The screen shows a page the loop's /pic does not know (an event's scene
+  // ended): fetch /pic again soon, whole, without its ETag.
+  void (*refetch)() = nullptr;
 };
 
 void begin(const Hooks &hooks);
@@ -66,6 +69,11 @@ bool screenLocked();
 bool keepsAwake();
 
 bool playing();
+
+// An event's scene, kept in flash, played at its sound's time instead of the
+// sound (scene_event1; AlarmClockHAL::setScenePlayer): event:start at `at`,
+// event:end at `until`. False: not in flash or not playable, the sound rings.
+bool playEvent(const char *sceneId, const char *eventId, int64_t at, int64_t until);
 
 } // namespace PacedPlayer
 
