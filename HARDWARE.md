@@ -106,10 +106,38 @@ including what was and was not validated on hardware.
   page it asked for is not on screen); buttons are read in their own task,
   so a press during a refresh is never lost. It plays only while the board
   stays awake (mains, USB, or a board without a battery); on battery the
-  start page (`/pic`) stays, inert. The server knows each panel's redraw
-  time; `rd=<ms>` would override it and is not sent. On the 7.5" driver
-  board the pages share the 384 KB LittleFS partition: about six 1-bit
-  pages.
+  start page (`/pic`) stays, inert. The board measures its own panel
+  refresh and declares it as `rd=<ms>` on every `/schedule`: the server
+  paces scenes on that figure (it keeps the stored one while a new
+  measure stays within 10 %), and on its own table only for a board that
+  sends none. It also declares `pf=<bytes>`, the room it has for a scene's
+  pages (`paced_player.cpp` `pageFlash`): the server refuses a scene whose
+  pages would not fit. On the 7.5" driver board the pages share the 384 KB
+  LittleFS partition: about six 1-bit pages.
+- **Events' scenes (`scene_event1`) on a paced player:** a scene an event
+  shows at a set time, played by the board itself (an alarm that fades in,
+  snoozes on a press and stops). The board keeps each upcoming event's
+  bundle and pages in flash ahead of its time (`/pacedev/`, `/paced/`, left
+  out of `pf=`), fires `event:start` at the event's time and `event:end`
+  when its window closes, then stops the scene. It plays on battery too,
+  from the window's opening, and wakes for it as for an alarm. The event's
+  sound entry names the scene it stands for (`sounds[].scene`): at that
+  time the board plays the scene instead of ringing, and rings the sound
+  only when the bundle is missing or does not load, so an alarm never stays
+  silent. Volume, loops and snooze are the scene's own logic, not the
+  board's. Declare `scene_event1`
+  only once all of this runs on the board (DEVICE_API.md "Events' scenes",
+  `paced_player.cpp` `playEvent`, `keepEvents`).
+- **Updates over the air (`ota1`) on battery:** a board that measures its
+  charge installs an offered update when plugged in *or* on battery at
+  25 % or more (`kBatteryFloorPercent` in `ota_client.cpp`, equal to the
+  server's `BATTERY_FLOOR_PERCENT`: change both together). It refuses
+  (`ota=failed:<id>:power`) only below that floor or when it cannot read
+  its charge. A board that cannot measure goes by the signed `powerSource`
+  (`powered`) or `powerOverride`. Never make the board stricter than the
+  server: firmware before #56 installed only plugged in, refused every
+  offer made on battery, and the update could reach it only over a cable
+  (`docs/ota_bench.md`, the platform's `docs/ota.md` "Power rule").
 - **A colour LCD draws its own screens** (boot, Wi-Fi setup, Wi-Fi OK, and
   with `welcome_local1` the Welcome page) with its fonts, flush left, #F7F2E8
   on black; the server sends what a screen says, not a picture of it, where
