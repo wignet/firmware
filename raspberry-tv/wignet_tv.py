@@ -104,14 +104,16 @@ class SupportLog:
             pass
 
 
-# Match the Wignet site and the ESP setup portal tokens.  The two mark
-# polygons below are the same 32x16 paths as website-wignet's brand SVG, so
-# the TV can show the brand before networking and without loading any asset.
-PAPER = (247, 242, 232)       # #f7f2e8 / --app-background
-INK = (51, 32, 33)            # #332021 / --foreground
-MUTED = (107, 89, 84)         # #6b5954 / --muted-foreground
-BORDER = (235, 229, 219)      # #ebe5db / --border
-CORAL = (186, 74, 79)         # #ba4a4f / --highlight
+# The startup style of the LCD boards and wifi_setup's screen: cream on black,
+# one coral accent, left-aligned, inside 8% of the width and 10% of the height
+# (beyond a TV's overscan, 5%).  The two mark polygons below are the same 32x16
+# paths as website-wignet's brand SVG, so the TV can show the brand before
+# networking and without loading any asset.
+BLACK = (0, 0, 0)
+CREAM = (247, 242, 232)       # #f7f2e8
+DIM = (150, 141, 130)         # cream at about 60% on black
+TRACK = (44, 40, 38)          # the progress bar's track
+CORAL = (213, 102, 104)       # #d56668
 
 
 def _rgb565(color):
@@ -120,7 +122,7 @@ def _rgb565(color):
     return bytes((pixel & 0xff, pixel >> 8))
 
 
-def progress_row(width, segment_width, offset, track_color=BORDER, segment_color=CORAL):
+def progress_row(width, segment_width, offset, track_color=TRACK, segment_color=CORAL):
     """Build one RGB565 row for the small, indeterminate startup bar."""
     segment_width = max(0, min(width, segment_width))
     offset = max(0, min(width - segment_width, offset))
@@ -417,12 +419,12 @@ def start_player(state_dir, power):
 
 # Pi OS Lite ships FreeSans/FreeMono; the Buildroot image ships Liberation.
 # Load the files directly: neither system is guaranteed to have Fontconfig.
-SANS_FONTS = ("/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-              "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-              "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
-MONO_FONTS = ("/usr/share/fonts/truetype/freefont/FreeMono.ttf",
-              "/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
-              "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf")
+SANS_FONTS = ("/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+              "/usr/share/fonts/truetype/freefont/FreeSans.ttf")
+BOLD_FONTS = ("/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+              "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf")
 
 
 def load_font(paths, size):
@@ -493,67 +495,35 @@ class Display:
         return frame
 
     def splash(self):
-        """Show the Wignet site-inspired startup screen before the first frame."""
+        """Show the startup screen before the first frame."""
         width, height = self.size
-        margin_x = max(28, width // 12)
-        top = max(24, height // 18)
-        mark_w = max(48, height // 18)
-        mark_h = mark_w // 2
-        mark_x, mark_y = margin_x, top + 3
-        half = mark_w // 2
-
-        image = Image.new("RGB", self.size, PAPER)
+        scale = min(height / 1080, width / 1920)
+        margin_x, margin_y = round(width * 0.084), round(height * 0.1)
+        image = Image.new("RGB", self.size, BLACK)
         draw = ImageDraw.Draw(image)
+
         # Exact silhouette of wignet-mark-ink.svg, scaled from its 32x16 viewBox.
-        draw.polygon(((mark_x + half, mark_y), (mark_x + mark_w, mark_y + mark_h),
-                      (mark_x + half, mark_y + mark_h)), fill=INK)
-        draw.polygon(((mark_x + half, mark_y + mark_h), (mark_x, mark_y + mark_h),
-                      (mark_x + mark_w // 4, mark_y + mark_h // 2)), fill=INK)
+        mark_w = round(60 * scale)
+        mark_h = half = mark_w // 2
+        x, y = margin_x, margin_y
+        draw.polygon(((x + half, y), (x + mark_w, y + mark_h), (x + half, y + mark_h)), fill=CREAM)
+        draw.polygon(((x + half, y + mark_h), (x, y + mark_h), (x + mark_w // 4, y + mark_h // 2)),
+                     fill=CREAM)
+        draw.text((x + mark_w + round(14 * scale), y + mark_h), "Wignet",
+                  font=load_font(BOLD_FONTS, max(16, round(40 * scale))), fill=CREAM, anchor="ls")
 
-        def line_height(font):
-            ascent, descent = font.getmetrics()
-            return ascent + descent
+        title_font = load_font(BOLD_FONTS, max(24, round(104 * scale)))
+        detail_font = load_font(SANS_FONTS, max(16, round(48 * scale)))
+        title_y = round(height * 0.475)
+        detail_y = title_y + round(110 * scale)
+        draw.text((margin_x, title_y), "A window for your agents.", font=title_font, fill=CREAM, anchor="ls")
+        draw.text((margin_x, detail_y), "Connecting to Wignet…", font=detail_font, fill=DIM, anchor="ls")
 
-        brand_font = load_font(SANS_FONTS, max(28, height // 30))
-        draw.text((mark_x + mark_w + max(12, height // 90),
-                   mark_y + (mark_h - line_height(brand_font)) // 2),
-                  "Wignet", font=brand_font, fill=INK)
-
-        rule_y = top + mark_h + max(22, height // 48)
-        draw.line(((margin_x, rule_y), (width - margin_x, rule_y)),
-                  fill=BORDER, width=max(1, height // 900))
-
-        kicker_font = load_font(MONO_FONTS, max(18, height // 48))
-        detail_font = load_font(SANS_FONTS, max(24, height // 36))
-        title_text = "Donnez une fenêtre à vos agents."
-        title_size = max(30, min(height // 12, int((width - 2 * margin_x) / (len(title_text) * 0.56))))
-        title_font = load_font(SANS_FONTS, title_size)
-        center_y = height // 2
-        kicker_y = (center_y - line_height(title_font) - line_height(detail_font)
-                    - max(40, height // 16))
-        title_y = kicker_y + line_height(kicker_font) + max(14, height // 48)
-        detail_y = title_y + line_height(title_font) + max(18, height // 40)
-        draw.text((margin_x, kicker_y), "ÉCRAN WIGNET  /  HDMI", font=kicker_font, fill=CORAL)
-        draw.text((margin_x, title_y), title_text, font=title_font, fill=INK)
-        draw.text((margin_x, detail_y), "Connexion à votre Wignet en cours.",
-                  font=detail_font, fill=MUTED)
-
-        bar_w = min(width - 2 * margin_x, max(180, width // 3))
-        bar_h = max(8, height // 90)
-        bar_y = detail_y + line_height(detail_font) + max(28, height // 24)
+        bar_w = min(width - 2 * margin_x, round(648 * scale))
+        bar_h = max(4, round(10 * scale))
+        bar_y = detail_y + round(80 * scale)
         self.progress_rect = ProgressRect(margin_x, bar_y, bar_w, bar_h)
-        draw.rectangle((margin_x, bar_y, margin_x + bar_w - 1, bar_y + bar_h - 1), fill=BORDER)
-
-        # The site uses short mono labels and a quiet coral accent, with no
-        # extra chrome competing with the screen's eventual content.
-        status_font = load_font(MONO_FONTS, max(16, height // 60))
-        status_h = line_height(status_font)
-        status_y = height - top - status_h
-        dot_size = max(6, height // 120)
-        dot_y = status_y + (status_h - dot_size) // 2
-        draw.rectangle((margin_x, dot_y, margin_x + dot_size - 1, dot_y + dot_size - 1), fill=CORAL)
-        draw.text((margin_x + dot_size + max(10, height // 100), status_y),
-                  "CONNEXION EN COURS", font=status_font, fill=MUTED)
+        draw.rectangle((margin_x, bar_y, margin_x + bar_w - 1, bar_y + bar_h - 1), fill=TRACK)
         return self._write_image(image)
 
     def start_progress(self):

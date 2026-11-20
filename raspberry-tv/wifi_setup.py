@@ -74,6 +74,8 @@ FONT = {
     ":": ("00000", "00110", "00110", "00000", "00110", "00110", "00000"),
     "-": ("00000", "00000", "00000", "11111", "00000", "00000", "00000"),
     "/": ("00001", "00010", "00010", "00100", "01000", "01000", "10000"),
+    "'": ("00100", "00100", "01000", "00000", "00000", "00000", "00000"),
+    ",": ("00000", "00000", "00000", "00000", "00110", "00100", "01000"),
 }
 
 
@@ -220,8 +222,117 @@ def rgb565(red: int, green: int, blue: int) -> int:
     return ((red >> 3) << 11) | ((green >> 2) << 5) | (blue >> 3)
 
 
+# The startup style shared with wignet_tv's splash and the LCD boards: cream
+# on black, one coral accent, left-aligned. Everything to read stays inside
+# 8% of the width and 10% of the height, beyond a TV's overscan (5%).
+BLACK = (0, 0, 0)
+CREAM = (247, 242, 232)      # #f7f2e8
+DIM = (150, 141, 130)        # cream at about 60% on black
+CORAL = (213, 102, 104)      # #d56668
+SANS_FONTS = ("/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+              "/usr/share/fonts/truetype/freefont/FreeSans.ttf")
+BOLD_FONTS = ("/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+              "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf")
+PORTAL_HINT = f"If it doesn't, open http://{AP_IP} on your phone"
+
+
+def screen_lines(ap_name: str, state: str, detail: str = "") -> list[tuple[str, str, str]]:
+    """What the setup screen says, as (role, step, text) from top to bottom.
+    Roles: label, title, step, network, body, footer. Both renderers read it."""
+    join = [("step", "1", "On your phone, join the network"), ("network", "", ap_name)]
+    if state == "preparing":
+        return [("label", "", "Wi-Fi connected"), ("title", "", "Preparing the screen"),
+                ("body", "", "The first page is on its way.")]
+    if state == "connecting":
+        return [("label", "", "Setup"), ("title", "", "Joining your Wi-Fi"),
+                ("network", "", detail), ("footer", "", "This takes a few seconds.")]
+    if state == "failed":
+        return [("label", "", "Setup"), ("title", "", "Something went wrong"),
+                ("body", "", detail)]
+    if state == "error":
+        return [("label", "", "Setup"), ("title", "", "Could not join your Wi-Fi"), *join,
+                ("step", "2", "Check the password and try again."), ("footer", "", PORTAL_HINT)]
+    return [("label", "", "Setup"), ("title", "", "Connect this Wignet to Wi-Fi"), *join,
+            ("step", "2", "The setup page opens by itself."), ("footer", "", PORTAL_HINT)]
+
+
+def _load_font(ImageFont, paths, size):
+    for path in paths:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default(size)
+
+
+def draw_setup(width: int, height: int, lines) -> "Image.Image":
+    """The setup screen with Pillow: smooth type, sized for the room."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    scale = min(height / 1080, width / 1920)
+    margin_x, margin_y = round(width * 0.084), round(height * 0.1)
+    size = {role: max(12, round(px * scale)) for role, px in
+            (("label", 30), ("title", 88), ("step", 48), ("body", 48), ("network", 96),
+             ("footer", 32), ("brand", 40))}
+    font = {role: _load_font(ImageFont, BOLD_FONTS if role in ("label", "title", "network", "brand")
+                             else SANS_FONTS, px) for role, px in size.items()}
+    step_font = _load_font(ImageFont, BOLD_FONTS, size["step"])
+    image = Image.new("RGB", (width, height), BLACK)
+    draw = ImageDraw.Draw(image)
+
+    # Brand mark (wignet_tv's 32x16 polygons) and wordmark, top left.
+    mark_w = round(60 * scale)
+    mark_h, half, x, y = mark_w // 2, mark_w // 2, margin_x, margin_y
+    draw.polygon(((x + half, y), (x + mark_w, y + mark_h), (x + half, y + mark_h)), fill=CREAM)
+    draw.polygon(((x + half, y + mark_h), (x, y + mark_h), (x + mark_w // 4, y + mark_h // 2)), fill=CREAM)
+    draw.text((x + mark_w + round(14 * scale), y + mark_h), "Wignet", font=font["brand"],
+              fill=CREAM, anchor="ls")
+
+    # Baselines: each line advances from the one above by a multiple of its own size.
+    advance = {"label": 0, "title": 1.4, "step": 1.55, "network": 1.25, "body": 1.4}
+    indent = round(64 * scale)
+    baseline = round(height * 0.325)
+    previous = None
+    for role, step, text in lines:
+        if role == "footer":
+            draw.text((margin_x, height - margin_y), text, font=font["footer"], fill=DIM, anchor="ls")
+            continue
+        gap = advance[role] * size[role]
+        if role == "step" and previous == "network":
+            gap = 1.05 * size["network"]
+        elif previous == "title":
+            gap = {"step": 1.55, "network": 1.55, "body": 1.2}[role] * size["title"]
+        baseline += round(gap)
+        if role == "label":
+            draw.text((margin_x, baseline), text.upper(), font=font["label"], fill=CORAL, anchor="ls")
+        elif role == "title":
+            draw.text((margin_x, baseline), text, font=font["title"], fill=CREAM, anchor="ls")
+        elif role == "step":
+            draw.text((margin_x, baseline), step, font=step_font, fill=CORAL, anchor="ls")
+            draw.text((margin_x + indent, baseline), text, font=font["step"], fill=CREAM, anchor="ls")
+        elif role == "network":
+            draw.text((margin_x + (indent if previous == "step" else 0), baseline), text,
+                      font=font["network"], fill=CORAL, anchor="ls")
+        else:
+            draw.text((margin_x, baseline), text, font=font["body"], fill=DIM, anchor="ls")
+        previous = role
+    return image
+
+
+def pack_rgb565(image) -> bytes:
+    import numpy as np
+    channels = np.asarray(image.convert("RGB"), dtype=np.uint16)
+    pixels = ((channels[:, :, 0] >> 3) << 11) | ((channels[:, :, 1] >> 2) << 5) | (channels[:, :, 2] >> 3)
+    return pixels.astype("<u2").tobytes()
+
+
 class SetupScreen:
-    """Draw readable setup instructions directly to the Pi's HDMI framebuffer."""
+    """Draw the setup instructions directly to the Pi's HDMI framebuffer:
+    with Pillow when it is installed (the Wignet image), else with the 5x7
+    font (Raspberry Pi OS before its runtime is installed)."""
+
     def __init__(self):
         fb = Path("/sys/class/graphics/fb0")
         self.width, self.height = map(int, (fb / "virtual_size").read_text().strip().split(","))
@@ -231,78 +342,76 @@ class SetupScreen:
             raise RuntimeError(f"unsupported framebuffer {self.width}x{self.height} {self.bpp}bpp")
         self.fd = os.open("/dev/fb0", os.O_WRONLY)
         self.previous = None
+        self.smooth = all(importlib.util.find_spec(name) for name in ("PIL", "numpy"))
 
-    def _text(self, frame: array.array, text: str, y: int, scale: int, color: int):
+    def _text(self, frame: array.array, text: str, x: int, y: int, scale: int, color: int):
         text = text.upper()
-        char_width = 6 * scale
-        x = max(0, (self.width - len(text) * char_width) // 2)
         on = array.array("H", [color]) * scale
         for char in text:
-            glyph = FONT.get(char, FONT[" "] if " " in FONT else ("00000",) * 7)
+            glyph = FONT.get(char, FONT[" "])
             for gy, row in enumerate(glyph):
                 for gx, bit in enumerate(row):
                     if bit != "1":
                         continue
                     px = x + gx * scale
+                    if px + scale > self.width:
+                        return
                     for dy in range(scale):
                         offset = (y + gy * scale + dy) * self.width + px
                         frame[offset:offset + scale] = on
-            x += char_width
+            x += 6 * scale
+
+    def _bitmap(self, lines) -> bytes:
+        width, height = self.width, self.height
+        frame = array.array("H", [rgb565(*BLACK)]) * (width * height)
+        colors = {"label": CORAL, "title": CREAM, "step": CREAM, "network": CORAL,
+                  "body": DIM, "footer": DIM}
+        base = max(2, min(8, width // 240))
+        scales = {"label": base, "title": base + 2, "step": base, "network": base + 2,
+                  "body": base, "footer": max(2, base - 1)}
+        margin_x, margin_y = round(width * 0.084), round(height * 0.1)
+        self._text(frame, "WIGNET", margin_x, margin_y, base, rgb565(*CREAM))
+        y = round(height * 0.3)
+        room = width - 2 * margin_x
+        previous = None
+        for role, step, text in lines:
+            # The 5x7 font cannot wrap: a line too long for the margins draws smaller.
+            indent = 3 * 6 * base if step or (role == "network" and previous == "step") else 0
+            scale = max(1, min(scales[role], (room - indent) // (6 * max(1, len(text)))))
+            if role == "footer":
+                self._text(frame, text, margin_x, height - margin_y - 7 * scale, scale, rgb565(*DIM))
+                continue
+            x = margin_x
+            if step:
+                self._text(frame, step, x, y, scale, rgb565(*CORAL))
+            x += indent
+            self._text(frame, text, x, y, scale, rgb565(*colors[role]))
+            y += 7 * scale + (5 * base if role == "label" else 7 * base)
+            previous = role
+        return frame.tobytes()
 
     def show(self, ap_name: str, state: str = "ready", detail: str = ""):
         signature = (ap_name, state, detail)
         if signature == self.previous:
             return
         self.previous = signature
-        width, height = self.width, self.height
-        paper = rgb565(247, 242, 232)
-        ink = rgb565(51, 32, 33)
-        muted = rgb565(107, 89, 84)
-        coral = rgb565(186, 74, 79)
-        frame = array.array("H", [paper]) * (width * height)
-        accent = array.array("H", [coral]) * width
-        frame[:width * 12] = accent * 12
-        scale = max(2, min(8, width // 150))
-        self._text(frame, "WIGNET", height // 7, scale, coral)
-        if state == "preparing":
-            self._text(frame, "WIFI CONNECTE", height * 2 // 7, max(2, scale - 1), ink)
-            self._text(frame, "PREPARATION DE L AFFICHAGE", height * 3 // 7,
-                       max(2, scale // 2), muted)
-            self._text(frame, "LE PREMIER ECRAN ARRIVE", height * 4 // 7,
-                       max(2, scale // 2), coral)
-        else:
-            title = "CONNEXION AU RESEAU" if state == "connecting" else (
-                "CONNEXION IMPOSSIBLE" if state == "error" else "CONFIGURER LE WIFI"
-            )
-            self._text(frame, title, height * 2 // 7, max(2, scale - 1), ink)
-            if state == "connecting":
-                lines = ["WIGNET ESSAIE DE REJOINDRE", detail]
-            elif state == "error":
-                lines = ["REESSAYEZ DEPUIS LE PORTAIL", detail]
-            else:
-                lines = ["1. CONNECTEZ VOTRE TELEPHONE AU RESEAU"]
-            y = height * 3 // 7
-            for line in lines:
-                self._text(frame, line, y, max(2, scale // 2), muted)
-                y += height // 12
-            self._text(frame, ap_name, height * 4 // 7, scale, coral)
-            self._text(frame, "2. LE PORTAIL WIFI S OUVRIRA AUTOMATIQUEMENT", height * 5 // 7,
-                       max(2, scale // 2), ink)
-            self._text(frame, f"SINON OUVREZ HTTP {AP_IP}", height * 6 // 7,
-                       max(2, scale // 2), muted)
-        row_bytes = width * 2
-        if self.stride == row_bytes:
-            data = frame.tobytes()
-        else:
-            blank = array.array("H", [0]) * ((self.stride - row_bytes) // 2)
-            padded = array.array("H")
-            for row in range(height):
-                start = row * width
-                padded.extend(frame[start:start + width])
-                padded.extend(blank)
-            data = padded.tobytes()
+        lines = screen_lines(ap_name, state, detail)
+        data = None
+        if self.smooth:
+            try:
+                data = pack_rgb565(draw_setup(self.width, self.height, lines))
+            except Exception as exc:  # Never lose the instructions to a font or Pillow problem.
+                LOG.warning("Smooth setup screen failed, using the 5x7 font: %s", exc)
+                self.smooth = False
+        if data is None:
+            data = self._bitmap(lines)
         if sys.byteorder != "little":
             raise RuntimeError("RGB565 setup screen requires a little-endian CPU")
+        row_bytes = self.width * 2
+        if self.stride != row_bytes:
+            padding = b"\0" * (self.stride - row_bytes)
+            data = b"".join(data[y * row_bytes:(y + 1) * row_bytes] + padding
+                            for y in range(self.height))
         written = os.pwrite(self.fd, data, 0)
         if written != len(data):
             raise OSError(f"short framebuffer write: {written} of {len(data)}")
@@ -537,7 +646,7 @@ def run_setup() -> int:
         LOG.exception("Wignet TV Wi-Fi setup failed: %s", exc)
         if screen:
             try:
-                screen.show(ap_name, "error", "NOUVEL ESSAI DANS 5 SECONDES")
+                screen.show(ap_name, "failed", "Trying again in 5 seconds.")
             except Exception:
                 LOG.exception("Could not display Wi-Fi setup error")
         return 1

@@ -77,5 +77,44 @@ class AccessPointTests(unittest.TestCase):
             self.assertEqual(wifi_setup.main(), 0)
 
 
+class SetupScreenTests(unittest.TestCase):
+    def screen(self, width, height):
+        screen = object.__new__(wifi_setup.SetupScreen)
+        screen.width, screen.height, screen.stride, screen.previous = width, height, width * 2, None
+        return screen
+
+    def test_every_state_says_it_in_english_and_names_the_network(self):
+        ready = wifi_setup.screen_lines("Wignet-6909", "ready")
+        self.assertIn(("network", "", "Wignet-6909"), ready)
+        self.assertEqual(ready[-1], ("footer", "", wifi_setup.PORTAL_HINT))
+        self.assertIn(("network", "", "Home"), wifi_setup.screen_lines("Wignet-6909", "connecting", "Home"))
+        for state in ("ready", "connecting", "error", "preparing", "failed"):
+            for role, _step, text in wifi_setup.screen_lines("Wignet-6909", state, "Home"):
+                self.assertIn(role, ("label", "title", "step", "network", "body", "footer"))
+                self.assertTrue(text.isascii(), text)
+
+    def test_bitmap_font_draws_every_character_the_screen_says(self):
+        for state in ("ready", "connecting", "error", "preparing", "failed"):
+            for _role, _step, text in wifi_setup.screen_lines("Wignet-6909", state, "Trying again in 5 seconds."):
+                self.assertLessEqual(set(text.upper()), set(wifi_setup.FONT), text)
+
+    def test_bitmap_screen_fills_the_frame_on_black(self):
+        data = self.screen(640, 360)._bitmap(wifi_setup.screen_lines("Wignet-6909", "ready"))
+        self.assertEqual(len(data), 640 * 360 * 2)
+        self.assertEqual(data[:2], b"\0\0")
+
+    @unittest.skipUnless(importlib.util.find_spec("PIL") and importlib.util.find_spec("numpy"), "needs Pillow")
+    def test_smooth_screen_keeps_text_out_of_the_overscan(self):
+        for width, height in ((1920, 1080), (1280, 720), (720, 720)):
+            image = wifi_setup.draw_setup(width, height, wifi_setup.screen_lines("Wignet-6909", "ready"))
+            self.assertEqual(image.size, (width, height))
+            box = image.convert("L").point(lambda v: 255 if v > 8 else 0).getbbox()
+            self.assertGreaterEqual(box[0], width * 0.05)
+            self.assertGreaterEqual(box[1], height * 0.05)
+            self.assertLessEqual(box[2], width * 0.95)
+            self.assertLessEqual(box[3], height * 0.95)
+            self.assertEqual(len(wifi_setup.pack_rgb565(image)), width * height * 2)
+
+
 if __name__ == "__main__":
     unittest.main()
