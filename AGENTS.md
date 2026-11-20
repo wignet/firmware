@@ -35,6 +35,13 @@ image fetching or wake scheduling. It is the client/server contract.
   its own token, declared only when the board has the hardware
   (`scene_sound1`, `scene_tone1`, `motion1`, `pwr_short1`): `HARDWARE.md`
   "Firmware rules", `docs/scenes.md`.
+  A paced player declares its measured redraw (`rd=`) and its room for pages
+  (`pf=`); with `scene_event1` it keeps events' scenes in flash and plays
+  them at their time, the event's sound ringing only when the scene cannot
+  play (`HARDWARE.md` "Events' scenes").
+- Updates over the air: a board that measures its battery installs when
+  plugged in or at 25 % or more, the server's floor, never stricter
+  (`kBatteryFloorPercent`, `HARDWARE.md` "Updates over the air").
 - A board that never sleeps (an LCD) declares `stays_awake1` and reports its
   real `pwr=`: the server keeps its cadence (`HARDWARE.md` "Power").
 - Wi-Fi setup portal: pages in `esp32/portal/`, served by
