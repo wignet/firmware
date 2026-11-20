@@ -142,7 +142,7 @@ class TvClientTests(unittest.TestCase):
 
     def test_startup_progress_row_keeps_track_on_both_sides(self):
         row = wignet_tv.progress_row(5, 2, 2)
-        track = wignet_tv._rgb565(wignet_tv.BORDER)
+        track = wignet_tv._rgb565(wignet_tv.TRACK)
         accent = wignet_tv._rgb565(wignet_tv.CORAL)
 
         self.assertEqual(row, track * 2 + accent * 2 + track)
