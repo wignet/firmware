@@ -111,7 +111,9 @@ static constexpr unsigned long LCD_RELAYOUT_GIVE_UP_MS = 30000;
 #include <ESP8266WiFi.h>
 using WignetWebServer = ESP8266WebServer;
 #else
+#if __has_include("soc/rtc_cntl_reg.h") // absent on the ESP32-C5
 #include "soc/rtc_cntl_reg.h"
+#endif
 #include "soc/soc.h"
 #include <HTTPClient.h>
 #include <Preferences.h>
