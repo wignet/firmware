@@ -15,16 +15,18 @@
  *
  * Besides the screen: scenes (lendPanel, pushRegion) and the CST816 touch
  * (touchAt, touch1). Audio, the QMI8658 and the AXP2101 (power_hal.cpp) are
- * board.h's. main.cpp draws its pages through GxEPD2 as on the other colour
- * boards; the adapter below hands them to the upright frame.
+ * board.h's. main.cpp draws directly through Adafruit_GFX into the upright
+ * frame.
  */
 
-#define ENABLE_GxEPD2_GFX 1
 #include "display_hal.h"
 #include <Arduino.h>
 #include <Arduino_GFX_Library.h>
+#if !defined(WIGNET_DISPLAY_RGB)
+#define ENABLE_GxEPD2_GFX 1
 #include <GxEPD2_BW.h>
 #include <GxEPD2_EPD.h>
+#endif
 #include <Wire.h>
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
@@ -135,7 +137,8 @@ static void pushFrame() {
   xSemaphoreGiveRecursive(panelLock);
 }
 
-// ============ GxEPD2 driver: 1-bit pages into the upright frame ============
+#if !defined(WIGNET_DISPLAY_RGB)
+// ============ E-paper compatibility driver ============
 
 class GxEPD2_AMOLED_Wignet : public GxEPD2_EPD {
 public:
@@ -277,6 +280,7 @@ private:
 
 static GxEPD2_BW<GxEPD2_AMOLED_Wignet, GxEPD2_AMOLED_Wignet::HEIGHT>
     display(GxEPD2_AMOLED_Wignet{});
+#endif
 
 namespace DisplayHAL {
 
@@ -292,12 +296,10 @@ void init() {
   }
   for (int i = 0; i < FRAME_PIXELS; i++) uprightFrame[i] = 0xFFFF;
   panelLock = xSemaphoreCreateRecursiveMutex();
-  // No display.init(): GxEPD2's init() calls SPI.begin() on the S3's default
-  // pins, SCK 12 and MOSI 11, this panel's CS and QSPI clock. The driver
-  // above needs no bus, and GxEPD2_BW's constructor already sets what init()
-  // would besides.
-  // Always upright: the turn is applied on the way to the panel.
+#if !defined(WIGNET_DISPLAY_RGB)
+  // Avoid GxEPD2::init(): its SPI.begin() uses the panel's QSPI pins.
   display.setRotation(0);
+#endif
   releaseResets();
   bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1,
                               LCD_SDIO2, LCD_SDIO3);
@@ -317,7 +319,9 @@ void init() {
 // Plugged in for now: nothing to put to sleep.
 void hibernate() {}
 
+#if !defined(WIGNET_DISPLAY_RGB)
 GxEPD2_GFX *getDisplay() { return &display; }
+#endif
 
 int getWidth() { return FRAME_W; }
 

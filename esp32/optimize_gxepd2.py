@@ -16,6 +16,7 @@ EXPECTED_DRIVERS = {
     "waveshare_driver_35": set(),
     "waveshare_esp32s3_lcd_154": set(),
     "waveshare_esp32s3_lcd_2": set(),
+    "waveshare_esp32s3_amoled_18": set(),
 }
 
 CORE_OBJECTS = {"GxEPD2_EPD"}
