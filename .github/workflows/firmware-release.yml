@@ -216,6 +216,11 @@ jobs:
         run: |
           if [ "$CACHED" = true ]; then
             echo "Compiled base restored: rebuilding wignet-tv and the images only"
+            # A fresh checkout makes the fragments newer than the cached
+            # BusyBox and kernel configurations, and Buildroot would rebuild
+            # both (33 min on 2026-11-24). They are in the cache key, so on a
+            # hit they are the very files the base was built from.
+            touch -d @0 raspberry-tv/buildroot/board/pi0w/*.fragment raspberry-tv/buildroot/configs/*
             make -C ../buildroot O="$OUT" wignet-tv-dirclean
           fi
           make -C ../buildroot O="$OUT"
