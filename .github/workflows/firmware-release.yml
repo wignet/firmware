@@ -127,8 +127,11 @@ jobs:
     env:
       BUILDROOT_TAG: "2026.02.3"
       BUILDROOT_COMMIT: 679b9ead7620bbf193620d1ebf56f53c1764d37a
-      BR2_DL_DIR: ${{ github.workspace }}/../buildroot-dl
-      OUT: ${{ github.workspace }}/../buildroot-output
+      # Absolute and without "..": actions/cache refuses such a path and saves
+      # nothing (the download cache never had an entry before 2026-11-24), and
+      # the compiled base keeps absolute paths, so it must not move.
+      BR2_DL_DIR: /home/runner/buildroot-dl
+      OUT: /home/runner/buildroot-output
     steps:
       - uses: actions/checkout@v4
         with:
