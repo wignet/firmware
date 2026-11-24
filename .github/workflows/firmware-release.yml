@@ -119,15 +119,19 @@ jobs:
   # The HDMI TV's Buildroot image (raspberry-tv/README.md): the SD card for a
   # first install, and the root filesystem the server offers over the air
   # (wignet-raspberry_pi_hdmi-rootfs.ext4.xz, docs/ota.md "Raspberry Pi
-  # profile" on the server). About an hour: only for tags and by hand.
+  # profile" on the server). About an hour in full; a minute or two when the
+  # compiled base is cached (below).
   tv:
     if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_tag == '') || startsWith(github.ref_name, 'tv-pi0w/') || (github.event_name == 'workflow_dispatch' && startsWith(inputs.release_tag, 'tv-pi0w/'))
     runs-on: ubuntu-latest
     env:
       BUILDROOT_TAG: "2026.02.3"
       BUILDROOT_COMMIT: 679b9ead7620bbf193620d1ebf56f53c1764d37a
-      BR2_DL_DIR: ${{ github.workspace }}/../buildroot-dl
-      OUT: ${{ github.workspace }}/../buildroot-output
+      # Absolute and without "..": actions/cache refuses such a path and saves
+      # nothing (the download cache never had an entry before 2026-11-24), and
+      # the compiled base keeps absolute paths, so it must not move.
+      BR2_DL_DIR: /home/runner/buildroot-dl
+      OUT: /home/runner/buildroot-output
     steps:
       - uses: actions/checkout@v4
         with:
@@ -181,10 +185,45 @@ jobs:
           path: ${{ env.BR2_DL_DIR }}
           key: buildroot-dl-${{ env.BUILDROOT_TAG }}-${{ hashFiles('raspberry-tv/buildroot/configs/*', 'raspberry-tv/buildroot/package/**') }}
           restore-keys: buildroot-dl-${{ env.BUILDROOT_TAG }}-
-      - name: Build the image
+      # The compiled base (kernel, Python, numpy, Pillow…) is cached without
+      # its object files, keyed on what decides it: Buildroot, the resolved
+      # .config and the kernel and BusyBox fragments. On a hit only the
+      # wignet-tv package and the images are rebuilt: 22 s instead of an hour
+      # on 2026-11-24, with the same 6,108 files, modes and owners as a full
+      # build apart from VERSION. A release tag always builds in full. A
+      # pull request reads the cache of main (seed it by running this
+      # workflow by hand on main) or of its own earlier runs.
+      - name: Configure Buildroot
+        id: base
         if: steps.scope.outputs.changed == '1'
+        env:
+          RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
         run: |
           make -C ../buildroot O="$OUT" BR2_EXTERNAL="$PWD/raspberry-tv/buildroot" wignet_tv_pi0w_defconfig
+          # BR2_EXTERNAL_WIGNET_VERSION is `git describe`: it changes with every commit.
+          hash=$( (grep -v '^BR2_EXTERNAL_WIGNET_VERSION=' "$OUT/.config"; cat raspberry-tv/buildroot/board/pi0w/*.fragment) | sha256sum | cut -c1-16)
+          echo "key=tv-base-$BUILDROOT_COMMIT-$hash" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: base-cache
+        if: steps.scope.outputs.changed == '1' && steps.base.outputs.release != 'true'
+        with:
+          path: ${{ env.OUT }}
+          key: ${{ steps.base.outputs.key }}
+      - name: Build the image
+        if: steps.scope.outputs.changed == '1'
+        env:
+          CACHED: ${{ steps.base-cache.outputs.cache-hit }}
+        run: |
+          if [ "$CACHED" = true ]; then
+            echo "Compiled base restored: rebuilding wignet-tv and the images only"
+            # A fresh checkout makes the fragments newer than the cached
+            # BusyBox and kernel configurations, and Buildroot would rebuild
+            # both (33 min on 2026-11-24). They are in the cache key, so on a
+            # hit they are the very files the base was built from.
+            touch -d @0 raspberry-tv/buildroot/board/pi0w/*.fragment raspberry-tv/buildroot/configs/*
+            make -C ../buildroot O="$OUT" wignet-tv-dirclean
+          fi
           make -C ../buildroot O="$OUT"
       # What the server would refuse, or what an owner must never receive.
       - name: Check the image
@@ -216,6 +255,14 @@ jobs:
           name: firmware-raspberry_pi_hdmi
           path: release/*
           if-no-files-found: error
+      - name: Drop the object files from the compiled base
+        if: steps.scope.outputs.changed == '1' && steps.base.outputs.release != 'true' && steps.base-cache.outputs.cache-hit != 'true'
+        run: find "$OUT/build" -type f \( -name '*.o' -o -name '*.a' -o -name '*.lo' \) -delete
+      - uses: actions/cache/save@v4
+        if: steps.scope.outputs.changed == '1' && steps.base.outputs.release != 'true' && steps.base-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.OUT }}
+          key: ${{ steps.base.outputs.key }}
 
   release:
     if: >-
