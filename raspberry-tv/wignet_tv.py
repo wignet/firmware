@@ -517,7 +517,7 @@ class Display:
         title_y = round(height * 0.475)
         detail_y = title_y + round(110 * scale)
         draw.text((margin_x, title_y), "A window for your agents.", font=title_font, fill=CREAM, anchor="ls")
-        draw.text((margin_x, detail_y), "Connecting to Wignet…", font=detail_font, fill=DIM, anchor="ls")
+        draw.text((margin_x, detail_y), "Connecting…", font=detail_font, fill=DIM, anchor="ls")
 
         bar_w = min(width - 2 * margin_x, round(648 * scale))
         bar_h = max(4, round(10 * scale))
